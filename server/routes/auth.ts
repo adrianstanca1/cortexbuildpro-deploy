@@ -165,12 +165,101 @@ router.get('/callback', async (req: Request, res: Response) => {
 });
 
 /**
+ * Google OAuth Configuration
+ */
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+
+/**
+ * Exchange authorization code for Google access token
+ * POST /api/auth/google/token
+ */
+router.post('/google/token', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ error: 'Authorization code required' });
+    }
+
+    // Exchange code for token with Google
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: 'postmessage', // For popup flow
+      }).toString(),
+    });
+
+    const data = await tokenResponse.json();
+    if (data.error) {
+      console.error('Google token error:', data.error);
+      return res.status(400).json({ error: data.error_description || data.error });
+    }
+
+    // Return the access token to the client
+    res.json({
+      access_token: data.access_token,
+      token_type: data.token_type,
+      expires_in: data.expires_in,
+      refresh_token: data.refresh_token,
+    });
+  } catch (error) {
+    console.error('Google token exchange error:', error);
+    res.status(500).json({ error: 'Failed to exchange authorization code' });
+  }
+});
+
+/**
+ * Get current authenticated user's Google profile
+ * GET /api/auth/google/user
+ */
+router.get('/google/user', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!userResponse.ok) {
+      return res.status(userResponse.status).json({ error: 'Failed to fetch user' });
+    }
+
+    const user = await userResponse.json();
+    res.json(user);
+  } catch (error) {
+    console.error('Google user fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+/**
  * Logout endpoint
  * POST /api/auth/github/logout
  */
 router.post('/github/logout', async (_req: Request, res: Response) => {
   // In a production app, you might want to revoke the token with GitHub
   // For now, we just return success - the client will clear local storage
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+/**
+ * Google Logout endpoint
+ * POST /api/auth/google/logout
+ */
+router.post('/google/logout', async (_req: Request, res: Response) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 

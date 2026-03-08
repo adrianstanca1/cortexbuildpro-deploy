@@ -499,7 +499,7 @@ const LiveProjectMapView: React.FC<LiveProjectMapViewProps> = ({ projectId }) =>
                                    >
                                        <option value="Entry">On Entry</option>
                                        <option value="Exit">On Exit</option>
-                                       <option value="Loitering">Loitering (>5 mins)</option>
+                                       <option value="Loitering">Loitering (&gt;5 mins)</option>
                                        <option value="Capacity">Capacity Limit Exceeded</option>
                                    </select>
                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={16} />

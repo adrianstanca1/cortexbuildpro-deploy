@@ -7,11 +7,6 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/server/server.js" }
   ],
-  "functions": {
-    "server/server.js": {
-      "runtime": "nodejs22.x"
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
@@ -21,9 +16,5 @@
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     }
-  ],
-  "env": {
-    "GITHUB_CLIENT_ID": "@oauth_client_id",
-    "GITHUB_CLIENT_SECRET": "@oauth_client_secret"
-  }
+  ]
 }

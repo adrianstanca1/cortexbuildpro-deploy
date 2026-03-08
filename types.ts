@@ -220,6 +220,7 @@ export interface UserProfile {
   projectIds?: string[];
   avatarInitials: string;
   avatarUrl?: string;
+  provider?: 'github' | 'google';
 }
 
 export interface Message {

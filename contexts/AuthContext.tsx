@@ -1,15 +1,28 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
+
+interface OAuthUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  provider: 'github' | 'google';
+}
 
 interface AuthContextType {
   user: UserProfile | null;
   login: (role: UserRole) => void;
+  loginWithOAuth: (oauthUser: OAuthUser) => void;
   logout: () => void;
   hasPermission: (allowedRoles: UserRole[]) => boolean;
   addProjectId: (id: string) => void;
+  token: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const AUTH_STORAGE_KEY = 'buildpro_auth';
+const TOKEN_STORAGE_KEY = 'buildpro_token';
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -21,6 +34,26 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
+    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+
+    if (storedAuth) {
+      try {
+        const parsedUser = JSON.parse(storedAuth);
+        setUser(parsedUser);
+      } catch (e) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    }
+
+    if (storedToken) {
+      setToken(storedToken);
+    }
+  }, []);
 
   const login = (role: UserRole) => {
     // Simulating backend user retrieval based on role selection
@@ -79,10 +112,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
     }
     setUser(mockUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockUser));
   };
 
-  const logout = () => {
+  const loginWithOAuth = (oauthUser: OAuthUser) => {
+    // Map OAuth user to UserProfile
+    const userProfile: UserProfile = {
+      id: oauthUser.id,
+      name: oauthUser.name,
+      email: oauthUser.email,
+      phone: '',
+      role: UserRole.COMPANY_ADMIN, // Default role for OAuth users
+      avatarInitials: oauthUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+      avatarUrl: oauthUser.avatarUrl,
+      companyId: 'c1',
+      projectIds: [],
+      provider: oauthUser.provider,
+    };
+
+    setUser(userProfile);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
+  };
+
+  const logout = async () => {
+    // Call logout endpoint if we have a token
+    if (token) {
+      try {
+        await fetch('/api/auth/github/logout', { method: 'POST' });
+      } catch (e) {
+        // Ignore logout errors
+      }
+    }
+
     setUser(null);
+    setToken(null);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
   };
 
   const hasPermission = (allowedRoles: UserRole[]) => {
@@ -92,15 +157,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addProjectId = (projectId: string) => {
     if (user && user.projectIds && !user.projectIds.includes(projectId) && !user.projectIds.includes('ALL')) {
-        setUser({
+        const updatedUser = {
             ...user,
             projectIds: [...user.projectIds, projectId]
-        });
+        };
+        setUser(updatedUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, hasPermission, addProjectId }}>
+    <AuthContext.Provider value={{ user, login, loginWithOAuth, logout, hasPermission, addProjectId, token }}>
       {children}
     </AuthContext.Provider>
   );

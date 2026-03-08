@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "build": "tsc",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:init": "ts-node services/database.ts",
@@ -18,8 +19,9 @@
     "ws": "^8.17.0"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.14.0",
     "@types/pg": "^8.11.0",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",

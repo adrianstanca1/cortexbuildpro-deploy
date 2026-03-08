@@ -34,9 +34,37 @@ else {
   console.log("API KEY FOUND (proxy will use this)")
 }
 
-// CORS configuration
+// CORS configuration - Allow multiple origins
+const allowedOrigins = [
+    'https://cortexbuildpro.com',
+    'https://www.cortexbuildpro.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://72.62.132.43:3000',
+    /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/, // Local network IPs
+    /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/, // Private network IPs
+];
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+
+        // Check if origin is in allowed list
+        const isAllowed = allowedOrigins.some(allowed => {
+            if (allowed instanceof RegExp) {
+                return allowed.test(origin);
+            }
+            return allowed === origin;
+        });
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            // For development, allow all origins
+            callback(null, true);
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -48,7 +76,7 @@ app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
 
 // GitHub OAuth routes
-const authRoutes = require('./routes/auth');
+const authRoutes = require('./routes/auth').default;
 app.use('/api/auth', authRoutes);
 
 // Rate limiter for the proxy
@@ -194,7 +222,7 @@ const serviceWorkerRegistrationScript = `
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load' , () => {
-    navigator.serviceWorker.register('./service-worker.js')
+    navigator.serviceWorker.register('/service-worker.js')
       .then(registration => {
         console.log('Service Worker registered successfully with scope:', registration.scope);
       })
@@ -208,12 +236,12 @@ if ('serviceWorker' in navigator) {
 </script>
 `;
 
-// Serve index.html or placeholder based on API key and file availability
-app.get('/', (req, res) => {
+// Helper function to serve index.html with script injections
+const serveIndexHtml = (req, res) => {
     const placeholderPath = path.join(publicPath, 'placeholder.html');
 
     // Try to serve index.html
-    console.log("LOG: Route '/' accessed. Attempting to serve index.html.");
+    console.log("LOG: Route accessed. Attempting to serve index.html.");
     const indexPath = path.join(staticPath, 'index.html');
 
     fs.readFile(indexPath, 'utf8', (err, indexHtmlData) => {
@@ -247,7 +275,16 @@ app.get('/', (req, res) => {
         }
         res.send(injectedHtml);
     });
-});
+};
+
+// Serve index.html at root path
+app.get('/', serveIndexHtml);
+
+// Serve index.html at /app path (for production deployments)
+app.get('/app', serveIndexHtml);
+
+// Catch-all for /app/* routes (SPA routing)
+app.get('/app/*', serveIndexHtml);
 
 app.get('/service-worker.js', (req, res) => {
    return res.sendFile(path.join(publicPath, 'service-worker.js'));
@@ -258,7 +295,7 @@ app.use(express.static(staticPath));
 
 // Auth routes for GitHub OAuth
 try {
-    const authRoutes = require('./routes/auth');
+    const authRoutes = require('./routes/auth').default;
     app.use('/api/auth', authRoutes);
     console.log('Auth routes mounted at /api/auth');
 } catch (err) {

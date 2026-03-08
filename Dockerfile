@@ -9,6 +9,8 @@ RUN npm install --omit=dev
 
 # Copy server logic and public folder
 COPY server/server.js ./
+COPY server/routes ./routes
+COPY server/services ./services
 COPY server/public ./public
 
 # Copy built frontend assets

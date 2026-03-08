@@ -1,6 +1,5 @@
-
-import React from 'react';
-import { HardHat, Check, ArrowRight, Shield, User, Briefcase } from 'lucide-react';
+import React, { useState } from 'react';
+import { HardHat, Check, ArrowRight, Shield, User, Briefcase, Github, Mail, Loader2 } from 'lucide-react';
 import { Page, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -9,11 +8,154 @@ interface LoginViewProps {
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
-  const { login } = useAuth();
+  const { login, loginWithOAuth } = useAuth();
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleDemoLogin = (role: UserRole) => {
+  const handleDemoLogin = async (role: UserRole) => {
     login(role);
     setPage(Page.IMAGINE);
+  };
+
+  const handleGitHubLogin = async () => {
+    setIsLoading('github');
+    setError(null);
+    try {
+      // Open GitHub OAuth popup
+      const clientId = 'Iv23lihOkwvRyu8n7WdY';
+      const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
+      const scope = encodeURIComponent('user:email read:user');
+      const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+
+      const popup = window.open(authUrl, 'github-oauth', 'width=600,height=800');
+
+      if (!popup) {
+        throw new Error('Popup blocked. Please allow popups for this site.');
+      }
+
+      // Listen for OAuth callback
+      const handleMessage = async (event: MessageEvent) => {
+        if (event.data?.type === 'github_oauth_callback') {
+          window.removeEventListener('message', handleMessage);
+
+          if (event.data.error) {
+            setError(event.data.error);
+            setIsLoading(null);
+            return;
+          }
+
+          if (event.data.token) {
+            // Exchange code for token via backend
+            try {
+              const response = await fetch('/api/auth/github/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: event.data.code }),
+              });
+
+              if (!response.ok) {
+                throw new Error('Failed to authenticate with GitHub');
+              }
+
+              const data = await response.json();
+
+              // Get user profile
+              const userResponse = await fetch('/api/auth/github/user', {
+                headers: { Authorization: `Bearer ${data.access_token}` },
+              });
+
+              if (!userResponse.ok) {
+                throw new Error('Failed to fetch user profile');
+              }
+
+              const user = await userResponse.json();
+
+              // Login with OAuth user
+              loginWithOAuth({
+                id: user.id?.toString() || user.login,
+                name: user.name || user.login,
+                email: user.email || `${user.login}@github.com`,
+                avatarUrl: user.avatar_url,
+                provider: 'github',
+              });
+
+              setPage(Page.IMAGINE);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Authentication failed');
+            }
+          }
+          setIsLoading(null);
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'GitHub login failed');
+      setIsLoading(null);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoading('google');
+    setError(null);
+    try {
+      // Use Google Identity Services
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+      if (!clientId) {
+        // Fallback: Use popup flow with backend
+        const { google } = window as any;
+        if (google?.accounts?.id) {
+          google.accounts.id.initialize({
+            client_id: clientId,
+            callback: async (response: any) => {
+              if (response.credential) {
+                // Send ID token to backend for verification
+                try {
+                  const res = await fetch('/api/auth/google/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential: response.credential }),
+                  });
+
+                  const data = await res.json();
+                  loginWithOAuth(data.user);
+                  setPage(Page.IMAGINE);
+                } catch (err) {
+                  setError('Google authentication failed');
+                }
+              }
+              setIsLoading(null);
+            },
+          });
+          google.accounts.id.prompt();
+        } else {
+          throw new Error('Google authentication not configured. Please set VITE_GOOGLE_CLIENT_ID.');
+        }
+      } else {
+        // Popup-based Google OAuth
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+          `client_id=${clientId}&` +
+          `redirect_uri=${encodeURIComponent(window.location.origin)}&` +
+          `response_type=code&` +
+          `scope=${encodeURIComponent('openid email profile')}&` +
+          `access_type=offline`;
+
+        const popup = window.open(authUrl, 'google-oauth', 'width=600,height=800');
+
+        if (!popup) {
+          throw new Error('Popup blocked. Please allow popups for this site.');
+        }
+
+        // Handle callback via postMessage or URL polling
+        // For now, we'll use a simpler approach with the token endpoint
+        setIsLoading(null);
+        setError('Google OAuth requires VITE_GOOGLE_CLIENT_ID to be configured.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google login failed');
+      setIsLoading(null);
+    }
   };
 
   const demoAccounts = [
@@ -38,7 +180,7 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
           <h2 className="text-4xl font-semibold leading-tight mb-6 text-zinc-800 tracking-tight">
             The Intelligent Platform for Modern Construction
           </h2>
-          
+
           <p className="text-lg text-zinc-500 mb-12 leading-relaxed max-w-md font-light">
               Manage projects, track safety, and leverage AI insights in one unified workspace.
           </p>
@@ -60,7 +202,7 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
               </div>
             ))}
           </div>
-          
+
           <div className="mt-auto">
               <div className="flex -space-x-3 mb-4">
                   {[1,2,3,4].map(i => (
@@ -73,7 +215,7 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
               <p className="text-xs text-zinc-400 font-medium">Trusted by leading construction firms globally.</p>
           </div>
         </div>
-        
+
         {/* Subtle Decorative Elements */}
         <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-50 rounded-full opacity-60 blur-3xl" />
         <div className="absolute top-20 right-20 w-64 h-64 bg-purple-50 rounded-full opacity-40 blur-3xl" />
@@ -87,15 +229,63 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
               <p className="text-zinc-500 text-sm">Securely sign in to your account to continue.</p>
           </div>
 
+          {/* OAuth Buttons */}
+          <div className="space-y-3 mb-6">
+            <button
+              onClick={handleGitHubLogin}
+              disabled={isLoading !== null}
+              className="w-full flex items-center justify-center gap-3 p-3.5 rounded-xl bg-zinc-900 text-white font-medium hover:bg-zinc-800 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading === 'github' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Github className="w-5 h-5" />
+              )}
+              <span>Continue with GitHub</span>
+            </button>
+
+            <button
+              onClick={handleGoogleLogin}
+              disabled={isLoading !== null}
+              className="w-full flex items-center justify-center gap-3 p-3.5 rounded-xl bg-white text-zinc-700 font-medium border border-zinc-200 hover:bg-zinc-50 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading === 'google' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+              )}
+              <span>Continue with Google</span>
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="flex items-center gap-4 my-6">
+            <div className="flex-1 h-px bg-zinc-200"></div>
+            <span className="text-xs text-zinc-400 font-medium uppercase tracking-wider">or use demo</span>
+            <div className="flex-1 h-px bg-zinc-200"></div>
+          </div>
+
           <div className="bg-white p-1 rounded-3xl border border-zinc-100 shadow-xl shadow-zinc-100/50 mb-8">
             <div className="bg-zinc-50/30 p-6 rounded-[20px]">
                 <p className="text-xs font-bold text-zinc-400 mb-6 uppercase tracking-widest text-center lg:text-left">Select Demo Role</p>
                 <div className="space-y-3">
                   {demoAccounts.map((account) => (
-                    <button 
+                    <button
                       key={account.email}
                       onClick={() => handleDemoLogin(account.role)}
-                      className={`w-full flex items-center justify-between p-4 rounded-2xl border bg-white transition-all shadow-sm hover:shadow-md group ${account.border} hover:scale-[1.01] active:scale-[0.99]`}
+                      disabled={isLoading !== null}
+                      className={`w-full flex items-center justify-between p-4 rounded-2xl border bg-white transition-all shadow-sm hover:shadow-md group ${account.border} hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-3 ${account.bg} ${account.color}`}>
@@ -114,7 +304,7 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
                 </div>
             </div>
           </div>
-          
+
           <div className="text-center">
               <p className="text-xs text-zinc-300 mb-3">
                   Protected by enterprise-grade encryption.

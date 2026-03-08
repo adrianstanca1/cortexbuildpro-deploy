@@ -33,3 +33,4 @@ credentials.json
 
 # GitHub secrets
 .github/secrets/
+.vercel

@@ -1,32 +1,32 @@
+"use strict";
 /**
  * Database Schema for CortexBuildPro
  * Run this file to initialize the database tables
  */
-
-import { Pool } from 'pg';
-
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SCHEMA_VERSION = void 0;
+exports.query = query;
+exports.initializeDatabase = initializeDatabase;
+exports.runMigrations = runMigrations;
+const pg_1 = require("pg");
 // Database connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
+const pool = new pg_1.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
 });
-
 // Query helper
-export async function query(text: string, params?: unknown[]) {
-  const start = Date.now();
-  const result = await pool.query(text, params);
-  const duration = Date.now() - start;
-  console.log('Query executed', { text: text.substring(0, 100), duration, rows: result.rowCount });
-  return result;
+async function query(text, params) {
+    const start = Date.now();
+    const result = await pool.query(text, params);
+    const duration = Date.now() - start;
+    console.log('Query executed', { text: text.substring(0, 100), duration, rows: result.rowCount });
+    return result;
 }
-
-export const SCHEMA_VERSION = '1.0.0';
-
-export async function initializeDatabase(): Promise<void> {
-  console.log('Initializing database schema...');
-
-  // Users table
-  await query(`
+exports.SCHEMA_VERSION = '1.0.0';
+async function initializeDatabase() {
+    console.log('Initializing database schema...');
+    // Users table
+    await query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       github_id INTEGER UNIQUE,
@@ -39,9 +39,8 @@ export async function initializeDatabase(): Promise<void> {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
-
-  // Companies table
-  await query(`
+    // Companies table
+    await query(`
     CREATE TABLE IF NOT EXISTS companies (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(255) NOT NULL,
@@ -49,9 +48,8 @@ export async function initializeDatabase(): Promise<void> {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
-
-  // Projects table
-  await query(`
+    // Projects table
+    await query(`
     CREATE TABLE IF NOT EXISTS projects (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id UUID REFERENCES companies(id),
@@ -74,9 +72,8 @@ export async function initializeDatabase(): Promise<void> {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
-
-  // Tasks table
-  await query(`
+    // Tasks table
+    await query(`
     CREATE TABLE IF NOT EXISTS tasks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       project_id UUID REFERENCES projects(id),
@@ -92,14 +89,12 @@ export async function initializeDatabase(): Promise<void> {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
-
-  // Create indexes
-  await query(`CREATE INDEX IF NOT EXISTS idx_projects_company ON projects(company_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_users_github ON users(github_id)`);
-
-  // Update timestamp trigger
-  await query(`
+    // Create indexes
+    await query(`CREATE INDEX IF NOT EXISTS idx_projects_company ON projects(company_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_users_github ON users(github_id)`);
+    // Update timestamp trigger
+    await query(`
     CREATE OR REPLACE FUNCTION update_updated_at()
     RETURNS TRIGGER AS $$
     BEGIN
@@ -108,36 +103,31 @@ export async function initializeDatabase(): Promise<void> {
     END;
     $$ LANGUAGE plpgsql
   `);
-
-  // Apply trigger to tables
-  await query(`
+    // Apply trigger to tables
+    await query(`
     DROP TRIGGER IF EXISTS update_users_updated_at ON users;
     CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at()
   `);
-
-  await query(`
+    await query(`
     DROP TRIGGER IF EXISTS update_projects_updated_at ON projects;
     CREATE TRIGGER update_projects_updated_at
     BEFORE UPDATE ON projects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at()
   `);
-
-  console.log('Database schema initialized successfully');
+    console.log('Database schema initialized successfully');
 }
-
-export async function runMigrations(): Promise<void> {
-  // Add future migrations here
-  console.log('Running migrations...');
+async function runMigrations() {
+    // Add future migrations here
+    console.log('Running migrations...');
 }
-
 // Self-executing when run directly
 if (require.main === module) {
-  initializeDatabase()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('Database initialization failed:', err);
-      process.exit(1);
+    initializeDatabase()
+        .then(() => process.exit(0))
+        .catch((err) => {
+        console.error('Database initialization failed:', err);
+        process.exit(1);
     });
 }
