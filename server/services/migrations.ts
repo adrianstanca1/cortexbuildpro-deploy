@@ -22,7 +22,46 @@ async function runMigrations() {
     }
     console.log('Companies migrated.');
 
-    // 2. Migrate Users (Merge with Team data)
+    // 2. Migrate RBAC: Roles
+    if (migrationData.roles) {
+        for (const role of migrationData.roles) {
+            await query(
+                `INSERT INTO roles (id, name, description, created_at)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (id) DO NOTHING`,
+                [role.id, role.name, role.description, role.createdAt]
+            );
+        }
+        console.log('Roles migrated.');
+    }
+
+    // 3. Migrate RBAC: Permissions
+    if (migrationData.permissions) {
+        for (const perm of migrationData.permissions) {
+            await query(
+                `INSERT INTO permissions (id, name, resource, action, description, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (id) DO NOTHING`,
+                [perm.id, perm.name, perm.resource, perm.action, perm.description, perm.createdAt]
+            );
+        }
+        console.log('Permissions migrated.');
+    }
+
+    // 4. Migrate RBAC: Role Permissions
+    if (migrationData.role_permissions) {
+        for (const rp of migrationData.role_permissions) {
+            await query(
+                `INSERT INTO role_permissions (role_id, permission_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT (role_id, permission_id) DO NOTHING`,
+                [rp.roleId, rp.permissionId]
+            );
+        }
+        console.log('Role Permissions migrated.');
+    }
+
+    // 5. Migrate Users (Merge with Team data)
     const teamMap = new Map();
     if (migrationData.team) {
         migrationData.team.forEach((m: any) => teamMap.set(m.id, m));
@@ -45,8 +84,8 @@ async function runMigrations() {
         [
             user.id, user.email, user.name, user.role, user.companyId, 
             profile.initials, profile.phone, profile.bio, profile.location,
-            profile.skills ? JSON.parse(profile.skills) : [],
-            profile.certifications ? JSON.parse(profile.certifications) : [],
+            profile.skills ? (typeof profile.skills === 'string' ? JSON.parse(profile.skills) : profile.skills) : [],
+            profile.certifications ? (typeof profile.certifications === 'string' ? JSON.parse(profile.certifications) : profile.certifications) : [],
             profile.performanceRating, profile.completedProjects, profile.hourlyRate,
             profile.status, profile.projectId,
             user.createdAt, user.updatedAt
@@ -55,7 +94,7 @@ async function runMigrations() {
     }
     console.log('Users migrated.');
 
-    // 3. Migrate Projects
+    // 6. Migrate Projects
     if (migrationData.projects) {
         for (const project of migrationData.projects) {
             await query(
@@ -75,10 +114,10 @@ async function runMigrations() {
                     project.location, project.type, project.status, project.health, project.progress,
                     project.budget, project.spent, project.startDate, project.endDate,
                     project.manager, project.image, project.teamSize, 
-                    project.weatherLocation ? JSON.parse(project.weatherLocation) : null,
+                    project.weatherLocation ? (typeof project.weatherLocation === 'string' ? JSON.parse(project.weatherLocation) : project.weatherLocation) : null,
                     project.aiAnalysis,
-                    project.zones ? JSON.parse(project.zones) : [],
-                    project.phases ? JSON.parse(project.phases) : [],
+                    project.zones ? (typeof project.zones === 'string' ? JSON.parse(project.zones) : project.zones) : [],
+                    project.phases ? (typeof project.phases === 'string' ? JSON.parse(project.phases) : project.phases) : [],
                     project.createdAt, project.updatedAt
                 ]
             );
@@ -86,7 +125,7 @@ async function runMigrations() {
         console.log('Projects migrated.');
     }
 
-    // 4. Migrate Channels
+    // 7. Migrate Channels
     if (migrationData.channels) {
         for (const channel of migrationData.channels) {
             await query(
@@ -99,20 +138,20 @@ async function runMigrations() {
         console.log('Channels migrated.');
     }
 
-    // 5. Migrate Team Messages
+    // 8. Migrate Team Messages
     if (migrationData.team_messages) {
         for (const msg of migrationData.team_messages) {
             await query(
                 `INSERT INTO team_messages (id, channel_id, user_id, user_name, message, timestamp, attachments)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
                  ON CONFLICT (id) DO NOTHING`,
-                [msg.id, msg.channelId, msg.userId, msg.userName, msg.message, msg.timestamp, msg.attachments ? JSON.parse(msg.attachments) : null]
+                [msg.id, msg.channelId, msg.userId, msg.userName, msg.message, msg.timestamp, msg.attachments ? (typeof msg.attachments === 'string' ? JSON.parse(msg.attachments) : msg.attachments) : null]
             );
         }
         console.log('Team messages migrated.');
     }
 
-    // 6. Migrate Transactions
+    // 9. Migrate Transactions
     if (migrationData.transactions) {
         for (const tx of migrationData.transactions) {
             await query(
@@ -125,7 +164,7 @@ async function runMigrations() {
         console.log('Transactions migrated.');
     }
 
-    // 7. Migrate Invoices
+    // 10. Migrate Invoices
     if (migrationData.invoices) {
         for (const inv of migrationData.invoices) {
             await query(
@@ -138,7 +177,7 @@ async function runMigrations() {
         console.log('Invoices migrated.');
     }
 
-    // 8. Migrate Tasks
+    // 11. Migrate Tasks
     if (migrationData.tasks) {
         for (const task of migrationData.tasks) {
             await query(
@@ -158,7 +197,7 @@ async function runMigrations() {
         console.log('Tasks migrated.');
     }
 
-    // 9. Migrate Daily Logs
+    // 12. Migrate Daily Logs
     if (migrationData.daily_logs) {
         for (const log of migrationData.daily_logs) {
             await query(
@@ -171,7 +210,7 @@ async function runMigrations() {
         console.log('Daily logs migrated.');
     }
 
-    // 10. Migrate RFIs
+    // 13. Migrate RFIs
     if (migrationData.rfis) {
         for (const rfi of migrationData.rfis) {
             await query(
@@ -184,7 +223,7 @@ async function runMigrations() {
         console.log('RFIs migrated.');
     }
 
-    // 11. Migrate Punch Items
+    // 14. Migrate Punch Items
     if (migrationData.punch_items) {
         for (const item of migrationData.punch_items) {
             await query(
@@ -197,7 +236,7 @@ async function runMigrations() {
         console.log('Punch items migrated.');
     }
 
-    // 12. Migrate Safety Incidents
+    // 15. Migrate Safety Incidents
     if (migrationData.safety_incidents) {
         for (const incident of migrationData.safety_incidents) {
             await query(
@@ -210,7 +249,7 @@ async function runMigrations() {
         console.log('Safety incidents migrated.');
     }
 
-    // 13. Migrate Equipment
+    // 16. Migrate Equipment
     if (migrationData.equipment) {
         for (const eq of migrationData.equipment) {
             await query(
@@ -223,7 +262,7 @@ async function runMigrations() {
         console.log('Equipment migrated.');
     }
 
-    // 14. Migrate Timesheets
+    // 17. Migrate Timesheets
     if (migrationData.timesheets) {
         for (const ts of migrationData.timesheets) {
             await query(
@@ -236,7 +275,7 @@ async function runMigrations() {
         console.log('Timesheets migrated.');
     }
 
-    // 15. Migrate Inventory
+    // 18. Migrate Inventory
     if (migrationData.inventory) {
         for (const item of migrationData.inventory) {
             await query(
@@ -247,6 +286,39 @@ async function runMigrations() {
             );
         }
         console.log('Inventory migrated.');
+    }
+
+    // 19. Migrate Dayworks
+    if (migrationData.dayworks) {
+        for (const dw of migrationData.dayworks) {
+            await query(
+                `INSERT INTO dayworks (id, company_id, project_id, date, description, labor, materials, total_labor_cost, total_material_cost, grand_total, status, attachments, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 ON CONFLICT (id) DO NOTHING`,
+                [dw.id, dw.companyId, dw.projectId, dw.date, dw.description, 
+                 dw.labor ? (typeof dw.labor === 'string' ? JSON.parse(dw.labor) : dw.labor) : null,
+                 dw.materials ? (typeof dw.materials === 'string' ? JSON.parse(dw.materials) : dw.materials) : null,
+                 dw.totalLaborCost, dw.totalMaterialCost, dw.grandTotal, dw.status,
+                 dw.attachments ? (typeof dw.attachments === 'string' ? JSON.parse(dw.attachments) : dw.attachments) : null,
+                 dw.createdAt]
+            );
+        }
+        console.log('Dayworks migrated.');
+    }
+
+    // 20. Migrate Documents
+    if (migrationData.documents) {
+        for (const doc of migrationData.documents) {
+            await query(
+                `INSERT INTO documents (id, company_id, project_id, name, type, size, url, status, linked_task_ids, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 ON CONFLICT (id) DO NOTHING`,
+                [doc.id, doc.companyId, doc.projectId, doc.name, doc.type, doc.size, doc.url, doc.status, 
+                 doc.linkedTaskIds ? (typeof doc.linkedTaskIds === 'string' ? JSON.parse(doc.linkedTaskIds) : doc.linkedTaskIds) : [],
+                 doc.createdAt]
+            );
+        }
+        console.log('Documents migrated.');
     }
 
     console.log('Migration completed successfully.');

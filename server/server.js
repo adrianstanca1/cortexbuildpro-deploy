@@ -77,7 +77,9 @@ app.set('trust proxy', 1 /* number of proxies between user and server */)
 
 // GitHub OAuth routes
 const authRoutes = require('./routes/auth').default;
+const projectRoutes = require('./routes/projects').default;
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
 
 // Rate limiter for the proxy
 const proxyLimiter = rateLimit({
@@ -292,15 +294,6 @@ app.get('/service-worker.js', (req, res) => {
 
 app.use('/public', express.static(publicPath));
 app.use(express.static(staticPath));
-
-// Auth routes for GitHub OAuth
-try {
-    const authRoutes = require('./routes/auth').default;
-    app.use('/api/auth', authRoutes);
-    console.log('Auth routes mounted at /api/auth');
-} catch (err) {
-    console.warn('Auth routes not loaded:', err.message);
-}
 
 // Start the HTTP server
 const server = app.listen(port, () => {

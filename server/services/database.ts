@@ -280,6 +280,72 @@ export async function initializeDatabase(): Promise<void> {
     )
   `);
 
+  // Dayworks table
+  await query(`
+    CREATE TABLE IF NOT EXISTS dayworks (
+      id VARCHAR(255) PRIMARY KEY,
+      company_id VARCHAR(255) REFERENCES companies(id),
+      project_id VARCHAR(255) REFERENCES projects(id),
+      date DATE NOT NULL,
+      description TEXT,
+      labor JSONB,
+      materials JSONB,
+      total_labor_cost DECIMAL(15,2),
+      total_material_cost DECIMAL(15,2),
+      grand_total DECIMAL(15,2),
+      status VARCHAR(50) DEFAULT 'Pending',
+      attachments JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Documents table
+  await query(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id VARCHAR(255) PRIMARY KEY,
+      company_id VARCHAR(255) REFERENCES companies(id),
+      project_id VARCHAR(255) REFERENCES projects(id),
+      name VARCHAR(255) NOT NULL,
+      type VARCHAR(50),
+      size VARCHAR(50),
+      url TEXT,
+      status VARCHAR(50),
+      linked_task_ids TEXT[],
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // RBAC: Roles table
+  await query(`
+    CREATE TABLE IF NOT EXISTS roles (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // RBAC: Permissions table
+  await query(`
+    CREATE TABLE IF NOT EXISTS permissions (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      resource VARCHAR(100),
+      action VARCHAR(100),
+      description TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // RBAC: Role Permissions junction table
+  await query(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      role_id VARCHAR(255) REFERENCES roles(id),
+      permission_id VARCHAR(255) REFERENCES permissions(id),
+      PRIMARY KEY (role_id, permission_id)
+    )
+  `);
+
   // Create indexes
   await query(`CREATE INDEX IF NOT EXISTS idx_projects_company ON projects(company_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
@@ -289,6 +355,8 @@ export async function initializeDatabase(): Promise<void> {
   await query(`CREATE INDEX IF NOT EXISTS idx_punch_items_project ON punch_items(project_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_safety_incidents_project ON safety_incidents(project_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_timesheets_user ON timesheets(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_dayworks_project ON dayworks(project_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id)`);
 
   // Update timestamp trigger
   await query(`
