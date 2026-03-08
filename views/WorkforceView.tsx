@@ -167,7 +167,8 @@ const WorkforceView: React.FC = () => {
                       <div key={skill} className="flex items-center justify-between p-2 hover:bg-zinc-50 rounded-lg transition-colors">
                           <span className="text-sm text-zinc-700 font-medium flex items-center gap-2">
                               {skill}
-                              {isGap && <AlertTriangle size={14} className="text-red-500" title="Low supply" />}
+                              {isGap && <AlertTriangle size={14} className="text-red-500" />}
+
                           </span>
                           <div className="flex items-center gap-3">
                               {isGap && <span className="text-[10px] font-bold text-red-500 uppercase bg-red-50 px-1.5 rounded">Risk</span>}

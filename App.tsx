@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoginView from './views/LoginView';
 import ProfileView from './views/ProfileView';
 import AIToolsView from './views/AIToolsView';
@@ -63,7 +64,11 @@ const AuthenticatedApp: React.FC = () => {
 
   // If not authenticated, show Login
   if (!user) {
-    return <LoginView setPage={setPage} />;
+    return (
+      <ErrorBoundary>
+        <LoginView setPage={setPage} />
+      </ErrorBoundary>
+    );
   }
 
   return (
@@ -76,7 +81,9 @@ const AuthenticatedApp: React.FC = () => {
           <TopBar setPage={setPage} />
           
           <main className="flex-1 overflow-y-auto bg-zinc-50/50 relative">
+            <ErrorBoundary>
               {page === Page.DASHBOARD && <DashboardView setPage={setPage} />}
+
               {page === Page.EXECUTIVE && <ExecutiveView />}
               {page === Page.LIVE_PROJECT_MAP && <LiveProjectMapView />}
               {page === Page.PROJECT_LAUNCHPAD && <ProjectsView onProjectSelect={handleProjectSelect} setPage={setPage} autoLaunch={true} />}
@@ -122,22 +129,26 @@ const AuthenticatedApp: React.FC = () => {
               {page === Page.MY_DESKTOP && (
                   <MyDesktopView 
                       installedApps={installedApps}
-                      setPage={setPage}
-                  />
-              )}
-          </main>
-        </div>
+                      setPage={setPage} 
+                      />
+                      )}
+                      </ErrorBoundary>
+                      </main>
+                      </div>
+
       </div>
   );
 };
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ProjectProvider>
-        <AuthenticatedApp />
-      </ProjectProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ProjectProvider>
+          <AuthenticatedApp />
+        </ProjectProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
 

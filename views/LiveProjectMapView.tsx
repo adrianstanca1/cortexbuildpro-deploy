@@ -457,9 +457,8 @@ const LiveProjectMapView: React.FC<LiveProjectMapViewProps> = ({ projectId }) =>
                                           onClick={() => setNewZoneData({...newZoneData, type: type as any})}
                                           className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border transition-all ${
                                               newZoneData.type === type 
-                                              ? (type === 'danger' ? 'bg-red-100 border-red-500 text-red-700 shadow-sm' : 
-                                                 type === 'warning' ? 'bg-orange-100 border-orange-500 text-orange-700 shadow-sm' :
-                                                 type === 'success' ? 'bg-green-100 border-green-500 text-green-700 shadow-sm' :
+                                              ? ((type as string) === 'danger' ? 'bg-red-100 border-red-500 text-red-700 shadow-sm' :
+                                                 (type as string) === 'warning' ? 'bg-orange-100 border-orange-500 text-orange-700 shadow-sm' : 
                                                  'bg-blue-100 border-blue-500 text-blue-700 shadow-sm')
                                               : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
                                           }`}
