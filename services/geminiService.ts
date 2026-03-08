@@ -1,8 +1,12 @@
 import { GoogleGenAI, LiveServerMessage, Modality, Content, GenerateContentResponse, Type } from "@google/genai";
 import { Message } from "../types";
 
-// Initialize the client with the environment key exclusively from process.env.API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const API_KEY = process.env.API_KEY || '';
+
+function getAI(): GoogleGenAI {
+  if (!API_KEY) throw new Error('Gemini API key not configured. AI features are unavailable.');
+  return new GoogleGenAI({ apiKey: API_KEY });
+}
 
 export interface ChatConfig {
   model: string;
@@ -62,7 +66,7 @@ export const streamChatResponse = async (
       });
 
     // Create a new instance right before call as per best practices
-    const chatAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const chatAi = getAI();
     
     const chatConfig: any = {
       systemInstruction: configOverride?.systemInstruction || "You are a helpful and precise AI assistant for the BuildPro construction platform.",
@@ -90,9 +94,9 @@ export const streamChatResponse = async (
         parts.push({ inlineData: { mimeType, data: base64Data } });
     }
     
-    const messageContent = { parts: parts.length > 0 ? parts : [{ text: "Analyze current context." }] };
+    const messageParts = parts.length > 0 ? parts : [{ text: "Analyze current context." }];
 
-    const result = await chat.sendMessageStream({ message: messageContent });
+    const result = await chat.sendMessageStream({ message: messageParts as any });
     
     let finalResponse: GenerateContentResponse | undefined;
     for await (const chunk of result) {
@@ -115,7 +119,7 @@ export const streamChatResponse = async (
  * Performs real-time web-grounded research search using Google Search tools.
  */
 export const researchGroundingSearch = async (query: string): Promise<{ text: string, links: any[] }> => {
-    const researchAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const researchAi = getAI();
     const response = await researchAi.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: query,
@@ -135,7 +139,7 @@ export const researchGroundingSearch = async (query: string): Promise<{ text: st
  * Performs specialized Google Maps grounding search.
  */
 export const mapsGroundingSearch = async (query: string, lat: number, lng: number): Promise<{ text: string, links: any[] }> => {
-    const mapsAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const mapsAi = getAI();
     const response = await mapsAi.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: query,
@@ -159,7 +163,7 @@ export const mapsGroundingSearch = async (query: string, lat: number, lng: numbe
  * Forensicly analyzes an invoice image.
  */
 export const analyzeInvoiceImage = async (base64Data: string, mimeType: string): Promise<any> => {
-    const invAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const invAi = getAI();
     const response = await invAi.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
@@ -186,7 +190,7 @@ export const analyzeInvoiceImage = async (base64Data: string, mimeType: string):
  * Ingests multiple datasets for cross-entity logic verification.
  */
 export const deepRegistryAudit = async (datasets: { projects: any[], ledger: any[], workforce: any[] }): Promise<any> => {
-    const auditAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const auditAi = getAI();
     const prompt = `
         Act as a Sovereign AI Auditor for CortexBuildPro.
         Analyze the following cross-entity datasets for structural and financial drift:
@@ -216,7 +220,7 @@ export const deepRegistryAudit = async (datasets: { projects: any[], ledger: any
  * Generates speech from text using Gemini 2.5 Flash TTS.
  */
 export const generateSpeech = async (text: string, voice: string = 'Kore'): Promise<string> => {
-    const ttsAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ttsAi = getAI();
     const response = await ttsAi.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
@@ -237,7 +241,7 @@ export const runRawPrompt = async (prompt: string, config?: GenConfig, mediaData
     const parts: any[] = [{ text: prompt }];
     if (mediaData) parts.push({ inlineData: { mimeType, data: mediaData } });
     
-    const promptAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const promptAi = getAI();
     const result = await promptAi.models.generateContent({
       model,
       contents: { parts },
@@ -256,12 +260,12 @@ export const parseAIJSON = <T = any>(text: string): T => {
 };
 
 export const getLiveClient = () => {
-    const liveAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const liveAi = getAI();
     return liveAi.live;
 };
 
 export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
-    const transcribeAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const transcribeAi = getAI();
     const response = await transcribeAi.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
@@ -278,7 +282,7 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string): Pr
  * Generates an image using Gemini 2.5 Flash Image.
  */
 export const generateImage = async (prompt: string, aspectRatio: string = "1:1"): Promise<string> => {
-    const imgAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const imgAi = getAI();
     const response = await imgAi.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [{ text: prompt }] },
@@ -301,7 +305,7 @@ export const generateImage = async (prompt: string, aspectRatio: string = "1:1")
  * Analyzes a technical drawing using Gemini 3 Pro.
  */
 export const analyzeDrawing = async (base64Data: string, mimeType: string): Promise<any> => {
-    const drawingAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const drawingAi = getAI();
     const response = await drawingAi.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
@@ -328,7 +332,7 @@ export const analyzeDrawing = async (base64Data: string, mimeType: string): Prom
  * Verifies market pricing for construction materials using web grounding.
  */
 export const checkMarketPricing = async (items: { description: string, price: number }[], location: string): Promise<any> => {
-    const priceAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const priceAi = getAI();
     const prompt = `Perform a real-time market pricing audit for these construction items in ${location}: ${JSON.stringify(items)}. 
                    Reconcile these prices with current 2025 global and local indices. 
                    Identify any items that are significantly above or below market nominals.

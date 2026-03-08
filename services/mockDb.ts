@@ -308,8 +308,8 @@ class MockDatabase {
     await delay(200);
     const data = localStorage.getItem(DB_KEYS.DOCS);
     return data ? JSON.parse(data) : [
-        { id: 'd1', name: 'City Centre - Structural Plans', type: 'CAD', projectId: 'p1', projectName: 'City Centre Plaza', size: '12.5 MB', date: '2025-10-15', status: 'Approved', linkedTaskIds: ['t4'] },
-        { id: 'd2', name: 'Building Permit - Phase 1', type: 'Document', projectId: 'p1', projectName: 'City Centre Plaza', size: '2.3 MB', date: '2025-09-20', status: 'Approved', linkedTaskIds: [] }
+        { id: 'd1', name: 'City Centre - Structural Plans', type: 'CAD', projectId: 'p1', companyId: 'c1', projectName: 'City Centre Plaza', size: '12.5 MB', date: '2025-10-15', status: 'Approved', linkedTaskIds: ['t4'] },
+        { id: 'd2', name: 'Building Permit - Phase 1', type: 'Document', projectId: 'p1', companyId: 'c1', projectName: 'City Centre Plaza', size: '2.3 MB', date: '2025-09-20', status: 'Approved', linkedTaskIds: [] }
     ];
   }
 
