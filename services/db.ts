@@ -544,15 +544,57 @@ class DatabaseService {
   async addDaywork(item: Daywork) { return this.add(STORES.DAYWORKS, item); }
 
   // New Methods for Safety, Equipment, Timesheets
-  async getSafetyIncidents(): Promise<SafetyIncident[]> { return this.getAll<SafetyIncident>(STORES.SAFETY_INCIDENTS); }
-  async addSafetyIncident(item: SafetyIncident) { return this.add(STORES.SAFETY_INCIDENTS, item); }
+  async getSafetyIncidents(projectId?: string): Promise<SafetyIncident[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/safety`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch safety incidents from backend", e);
+      }
+    }
+    return this.getAll<SafetyIncident>(STORES.SAFETY_INCIDENTS); 
+  }
+  async addSafetyIncident(item: SafetyIncident) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/safety`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: item.id,
+              type: item.type,
+              title: item.title,
+              severity: item.severity,
+              date: item.date,
+              status: item.status,
+              description: item.description
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create safety incident on backend", e);
+      }
+    }
+    return this.add(STORES.SAFETY_INCIDENTS, item); 
+  }
   async updateSafetyIncident(id: string, u: Partial<SafetyIncident>) {
       const items = await this.getSafetyIncidents();
       const existing = items.find(x => x.id === id);
       if(existing) await this.update(STORES.SAFETY_INCIDENTS, { ...existing, ...u });
   }
 
-  async getEquipment(): Promise<Equipment[]> { return this.getAll<Equipment>(STORES.EQUIPMENT); }
+  async getEquipment(projectId?: string): Promise<Equipment[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/equipment`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch equipment from backend", e);
+      }
+    }
+    return this.getAll<Equipment>(STORES.EQUIPMENT); 
+  }
   async addEquipment(item: Equipment) { return this.add(STORES.EQUIPMENT, item); }
   async updateEquipment(id: string, u: Partial<Equipment>) {
       const items = await this.getEquipment();
@@ -560,7 +602,17 @@ class DatabaseService {
       if(existing) await this.update(STORES.EQUIPMENT, { ...existing, ...u });
   }
 
-  async getTimesheets(): Promise<Timesheet[]> { return this.getAll<Timesheet>(STORES.TIMESHEETS); }
+  async getTimesheets(projectId?: string): Promise<Timesheet[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/timesheets`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch timesheets from backend", e);
+      }
+    }
+    return this.getAll<Timesheet>(STORES.TIMESHEETS); 
+  }
   async addTimesheet(item: Timesheet) { return this.add(STORES.TIMESHEETS, item); }
   async updateTimesheet(id: string, u: Partial<Timesheet>) {
       const items = await this.getTimesheets();

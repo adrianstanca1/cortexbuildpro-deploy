@@ -281,6 +281,72 @@ router.get('/:id/team', async (req: Request, res: Response) => {
 });
 
 /**
+ * Get Safety Incidents for a project
+ * GET /api/projects/:id/safety
+ */
+router.get('/:id/safety', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM safety_incidents WHERE project_id = $1 ORDER BY date DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch safety error:', error);
+    res.status(500).json({ error: 'Failed to fetch safety incidents' });
+  }
+});
+
+/**
+ * Create Safety Incident for a project
+ * POST /api/projects/:id/safety
+ */
+router.post('/:id/safety', async (req: Request, res: Response) => {
+  try {
+    const { id: projectId } = req.params;
+    const { id, type, title, severity, date, status, description } = req.body;
+    const result = await query(
+      `INSERT INTO safety_incidents (id, project_id, type, title, severity, date, status, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [id, projectId, type, title, severity, date, status, description]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Create safety error:', error);
+    res.status(500).json({ error: 'Failed to create safety incident' });
+  }
+});
+
+/**
+ * Get Equipment for a project
+ * GET /api/projects/:id/equipment
+ */
+router.get('/:id/equipment', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM equipment WHERE project_id = $1 ORDER BY name ASC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch equipment error:', error);
+    res.status(500).json({ error: 'Failed to fetch equipment' });
+  }
+});
+
+/**
+ * Get Timesheets for a project
+ * GET /api/projects/:id/timesheets
+ */
+router.get('/:id/timesheets', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM timesheets WHERE project_id = $1 ORDER BY date DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch timesheets error:', error);
+    res.status(500).json({ error: 'Failed to fetch timesheets' });
+  }
+});
+
+/**
  * Get Inventory for a company
  * GET /api/inventory?companyId=c1
  */
