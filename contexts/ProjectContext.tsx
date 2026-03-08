@@ -19,6 +19,8 @@ interface ProjectContextType {
   equipment: Equipment[];
   timesheets: Timesheet[];
   isLoading: boolean;
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
   
   // Project CRUD
   addProject: (project: Project) => void;
@@ -87,48 +89,69 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-  // Initial Data Load
+  // Initial Data Load (Global / Company-wide)
   useEffect(() => {
-    const loadData = async () => {
+    const loadGlobalData = async () => {
       setIsLoading(true);
       try {
-        const [p, t, tm, d, c, i, r, pi, dl, dw, si, eq, ts] = await Promise.all([
+        const [p, tm, c, i, eq, si, ts] = await Promise.all([
           db.getProjects(),
-          db.getTasks(),
           db.getTeam(),
-          db.getDocuments(),
           db.getClients(),
           db.getInventory(),
-          db.getRFIs(),
-          db.getPunchItems(),
-          db.getDailyLogs(),
-          db.getDayworks(),
-          db.getSafetyIncidents(),
           db.getEquipment(),
+          db.getSafetyIncidents(),
           db.getTimesheets()
         ]);
         setProjects(p);
-        setTasks(t);
         setTeamMembers(tm);
-        setDocuments(d);
         setClients(c);
         setInventory(i);
-        setRFIs(r);
-        setPunchItems(pi);
-        setDailyLogs(dl);
-        setDayworks(dw);
-        setSafetyIncidents(si);
         setEquipment(eq);
+        setSafetyIncidents(si);
         setTimesheets(ts);
+        
+        // Auto-select first project if none active
+        if (p.length > 0 && !activeProjectId) {
+            setActiveProjectId(p[0].id);
+        }
       } catch (e) {
-        console.error("Failed to load data from DB", e);
+        console.error("Failed to load global data from DB", e);
       } finally {
         setIsLoading(false);
       }
     };
-    loadData();
+    loadGlobalData();
   }, []);
+
+  // Project-specific Data Load
+  useEffect(() => {
+    if (!activeProjectId) return;
+
+    const loadProjectData = async () => {
+        try {
+            const [t, d, r, pi, dl, dw] = await Promise.all([
+                db.getTasks(activeProjectId),
+                db.getDocuments(activeProjectId),
+                db.getRFIs(activeProjectId),
+                db.getPunchItems(activeProjectId),
+                db.getDailyLogs(activeProjectId),
+                db.getDayworks()
+            ]);
+            setTasks(t);
+            setDocuments(d);
+            setRFIs(r);
+            setPunchItems(pi);
+            setDailyLogs(dl);
+            setDayworks(dw);
+        } catch (e) {
+            console.error("Failed to load project-specific data", e);
+        }
+    };
+    loadProjectData();
+  }, [activeProjectId]);
 
   // --- RBAC & Multi-tenant Filtering ---
   const visibleProjects = useMemo(() => {
@@ -142,12 +165,15 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const visibleProjectIds = useMemo(() => visibleProjects.map(p => p.id), [visibleProjects]);
 
   const visibleTasks = useMemo(() => {
+      // If we have an active project and we're using backend, tasks state is already filtered
+      // But for hybrid consistency, we still ensure they belong to visible projects
       return tasks.filter(t => visibleProjectIds.includes(t.projectId));
   }, [tasks, visibleProjectIds]);
 
   const visibleTeam = useMemo(() => {
       if (!user) return [];
       if (user.role === UserRole.SUPER_ADMIN) return teamMembers;
+      // Filter by company for general team views
       return teamMembers.filter(m => m.companyId === user.companyId);
   }, [teamMembers, user]);
 
@@ -345,6 +371,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         equipment: visibleEquipment,
         timesheets: visibleTimesheets,
         isLoading,
+        activeProjectId,
+        setActiveProjectId,
         addProject,
         updateProject,
         deleteProject,

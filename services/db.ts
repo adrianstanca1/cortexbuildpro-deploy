@@ -309,6 +309,27 @@ class DatabaseService {
   }
 
   async addProject(p: Project) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: p.id,
+              name: p.name,
+              company_id: p.companyId,
+              code: p.code,
+              description: p.description,
+              location: p.location,
+              type: p.type,
+              manager: p.manager
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create project on backend", e);
+      }
+    }
     return this.add(STORES.PROJECTS, p); 
   }
 
@@ -343,7 +364,29 @@ class DatabaseService {
     }
     return this.getAll<Task>(STORES.TASKS); 
   }
-  async addTask(t: Task) { return this.add(STORES.TASKS, t); }
+  async addTask(t: Task) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${t.projectId}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: t.id,
+              title: t.title,
+              description: t.description,
+              status: t.status,
+              priority: t.priority,
+              assignee_name: t.assigneeName,
+              due_date: t.dueDate
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create task on backend", e);
+      }
+    }
+    return this.add(STORES.TASKS, t); 
+  }
   async updateTask(id: string, t: Partial<Task>) {
       const tasks = await this.getTasks();
       const existing = tasks.find(x => x.id === id);
@@ -403,7 +446,28 @@ class DatabaseService {
     }
     return this.getAll<RFI>(STORES.RFIS); 
   }
-  async addRFI(item: RFI) { return this.add(STORES.RFIS, item); }
+  async addRFI(item: RFI) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/rfis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: item.id,
+              subject: item.subject,
+              number: item.number,
+              description: item.description,
+              assigned_to: item.assignedTo,
+              due_date: item.dueDate
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create RFI on backend", e);
+      }
+    }
+    return this.add(STORES.RFIS, item); 
+  }
 
   async getPunchItems(projectId?: string): Promise<PunchItem[]> { 
     if (await this.checkBackend() && projectId) {
@@ -416,7 +480,29 @@ class DatabaseService {
     }
     return this.getAll<PunchItem>(STORES.PUNCH_ITEMS); 
   }
-  async addPunchItem(item: PunchItem) { return this.add(STORES.PUNCH_ITEMS, item); }
+  async addPunchItem(item: PunchItem) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/punch-items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: item.id,
+              title: item.title,
+              location: item.location,
+              description: item.description,
+              priority: item.priority,
+              assigned_to: item.assignedTo,
+              due_date: item.dueDate
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create punch item on backend", e);
+      }
+    }
+    return this.add(STORES.PUNCH_ITEMS, item); 
+  }
 
   async getDailyLogs(projectId?: string): Promise<DailyLog[]> { 
     if (await this.checkBackend() && projectId) {
@@ -429,7 +515,30 @@ class DatabaseService {
     }
     return this.getAll<DailyLog>(STORES.DAILY_LOGS); 
   }
-  async addDailyLog(item: DailyLog) { return this.add(STORES.DAILY_LOGS, item); }
+  async addDailyLog(item: DailyLog) { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/daily-logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              id: item.id,
+              date: item.date,
+              weather: item.weather,
+              notes: item.notes,
+              activities: item.activities,
+              workforce: item.workforce,
+              created_by: item.createdBy,
+              status: item.status
+          })
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to create daily log on backend", e);
+      }
+    }
+    return this.add(STORES.DAILY_LOGS, item); 
+  }
 
   async getDayworks(): Promise<Daywork[]> { return this.getAll<Daywork>(STORES.DAYWORKS); }
   async addDaywork(item: Daywork) { return this.add(STORES.DAYWORKS, item); }
