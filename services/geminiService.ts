@@ -1,323 +1,346 @@
-
 import { GoogleGenAI, LiveServerMessage, Modality, Content, GenerateContentResponse, Type } from "@google/genai";
 import { Message } from "../types";
 
-// Initialize the client to use the local proxy
-const ai = new GoogleGenAI({ 
-  apiKey: "PROXY_MANAGED", 
-  httpOptions: { 
-    baseUrl: window.location.origin + "/api-proxy" 
-  } 
-});
+// Initialize the client with the environment key exclusively from process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface ChatConfig {
   model: string;
   systemInstruction?: string;
-  thinkingBudget?: number; // For Thinking Mode
-  thinkingConfig?: { thinkingBudget: number }; // Added for compatibility
-  tools?: any[]; // For Grounding (Search/Maps)
+  thinkingBudget?: number;
+  tools?: any[];
   responseMimeType?: string;
-  responseSchema?: any;
+  toolConfig?: any;
 }
 
+/**
+ * Generic configuration for prompt execution.
+ */
+export interface GenConfig {
+  temperature?: number;
+  topP?: number;
+  responseMimeType?: string;
+  systemInstruction?: string;
+  thinkingConfig?: { thinkingBudget: number };
+  model?: string;
+  tools?: any[];
+  toolConfig?: any;
+  imageConfig?: {
+      aspectRatio?: string;
+      imageSize?: string;
+  };
+}
+
+/**
+ * Sends a chat message and returns a streaming response.
+ * Follows the direct sendMessageStream pattern.
+ */
 export const streamChatResponse = async (
   history: Message[],
   newMessage: string,
   imageData?: string,
   mimeType: string = 'image/jpeg',
-  onChunk?: (text: string) => void,
+  onChunk?: (text: string, metadata?: any) => void,
   configOverride?: ChatConfig
 ): Promise<GenerateContentResponse> => {
   
-  // Default to 3-Pro for chat unless specified
   const model = configOverride?.model || "gemini-3-pro-preview";
   
   try {
-    // Convert internal Message history to API Content format
     const apiHistory: Content[] = history
       .filter(msg => !msg.isThinking && msg.id !== 'intro')
       .map(msg => {
         const parts: any[] = [];
-        
-        if (msg.text) {
-          parts.push({ text: msg.text });
-        }
-        
+        if (msg.text) parts.push({ text: msg.text });
         if (msg.image && msg.role === 'user') {
-          try {
-            // Check if it's a data URL
-            const matches = msg.image.match(/^data:(.+);base64,(.+)$/);
-            if (matches) {
-                const mime = matches[1];
-                const data = matches[2];
-                parts.push({ 
-                  inlineData: { 
-                    mimeType: mime, 
-                    data: data 
-                  } 
-                });
-            }
-          } catch (e) {
-            console.warn("Failed to parse history image", e);
+          const matches = msg.image.match(/^data:(.+);base64,(.+)$/);
+          if (matches) {
+            parts.push({ inlineData: { mimeType: matches[1], data: matches[2] } });
           }
         }
-
-        return {
-          role: msg.role,
-          parts: parts
-        };
+        return { role: msg.role, parts };
       });
 
-    // Configure the chat
+    // Create a new instance right before call as per best practices
+    const chatAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const chatConfig: any = {
-      systemInstruction: configOverride?.systemInstruction || "You are a helpful, witty, and precise AI assistant for the BuildPro construction platform.",
+      systemInstruction: configOverride?.systemInstruction || "You are a helpful and precise AI assistant for the BuildPro construction platform.",
     };
 
-    // Apply thinking budget if present
-    if (configOverride?.thinkingConfig?.thinkingBudget) {
-      chatConfig.thinkingConfig = configOverride.thinkingConfig;
-    } else if (configOverride?.thinkingBudget) {
+    // Apply thinking budget only to Gemini 3 series
+    if (model.includes('gemini-3') && configOverride?.thinkingBudget) {
       chatConfig.thinkingConfig = { thinkingBudget: configOverride.thinkingBudget };
     }
 
-    // Apply tools if present (Grounding)
-    if (configOverride?.tools) {
-      chatConfig.tools = configOverride.tools;
-    }
+    if (configOverride?.tools) chatConfig.tools = configOverride.tools;
+    if (configOverride?.toolConfig) chatConfig.toolConfig = configOverride.toolConfig;
+    if (configOverride?.responseMimeType) chatConfig.responseMimeType = configOverride.responseMimeType;
 
-    const chat = ai.chats.create({
+    const chat = chatAi.chats.create({
       model: model,
       config: chatConfig,
       history: apiHistory
     });
 
-    // Construct the new message
     const parts: any[] = [];
-    if (newMessage.trim()) {
-        parts.push({ text: newMessage });
-    }
+    if (newMessage.trim()) parts.push({ text: newMessage });
     if (imageData) {
-        parts.push({ inlineData: { mimeType: mimeType, data: imageData } });
+        const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+        parts.push({ inlineData: { mimeType, data: base64Data } });
     }
     
-    const messageContent = { parts: parts.length > 0 ? parts : [{ text: "Analyze this." }] };
+    const messageContent = { parts: parts.length > 0 ? parts : [{ text: "Analyze current context." }] };
 
-    const result = await chat.sendMessageStream({ message: messageContent.parts });
+    const result = await chat.sendMessageStream({ message: messageContent });
     
     let finalResponse: GenerateContentResponse | undefined;
     for await (const chunk of result) {
-      finalResponse = chunk; // Keep the last chunk for full metadata (grounding etc)
-      const text = chunk.text || "";
-      if (onChunk) onChunk(text);
+      finalResponse = chunk as GenerateContentResponse;
+      if (onChunk && finalResponse.text) {
+          const metadata = finalResponse.candidates?.[0]?.groundingMetadata;
+          onChunk(finalResponse.text, metadata);
+      }
     }
     
-    return finalResponse!; // Return last chunk which contains grounding metadata
+    return finalResponse!;
 
   } catch (error) {
-    console.error("Chat error:", error);
+    console.error("Neural link error:", error);
     throw error;
   }
 };
 
-// Updated Image Generation to use Gemini 3 Pro Image Preview
-export const generateImage = async (prompt: string, aspectRatio: string = "1:1"): Promise<string> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
-      contents: {
-        parts: [{ text: prompt }],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: aspectRatio,
-          imageSize: "1K"
+/**
+ * Performs real-time web-grounded research search using Google Search tools.
+ */
+export const researchGroundingSearch = async (query: string): Promise<{ text: string, links: any[] }> => {
+    const researchAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await researchAi.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: query,
+        config: {
+            tools: [{ googleSearch: {} }],
+            systemInstruction: "You are a forensic industry analyst. Extract real-time pricing, indices, and regulatory data."
         }
-      },
-    });
-    
-    // Extract image
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-      }
-    }
-    throw new Error("No image generated");
-  } catch (e) {
-    console.warn("Image Gen failed", e);
-    throw e;
-  }
-};
-
-// Veo Video Generation
-export const generateVideo = async (prompt: string, aspectRatio: '16:9' | '9:16' = '16:9'): Promise<string> => {
-  try {
-    let operation = await ai.models.generateVideos({
-      model: 'veo-3.1-fast-generate-preview',
-      prompt: prompt,
-      config: {
-        numberOfVideos: 1,
-        resolution: '720p',
-        aspectRatio: aspectRatio
-      }
     });
 
-    // Poll for completion
-    while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
-      operation = await ai.operations.getVideosOperation({operation: operation});
-    }
-
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) throw new Error("No video URI returned");
-
-    // Fetch the actual video bytes through the proxy
-    const proxyVideoUri = videoUri.replace('https://generativelanguage.googleapis.com/', window.location.origin + '/api-proxy/');
-    const videoResponse = await fetch(proxyVideoUri);
-    if (!videoResponse.ok) throw new Error("Failed to download video");
-    
-    const blob = await videoResponse.blob();
-    return URL.createObjectURL(blob);
-  } catch (e) {
-    console.error("Veo Generation Error:", e);
-    throw e;
-  }
+    return {
+        text: response.text || "",
+        links: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
 };
 
-// Audio Transcription
-export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: audioBase64 } },
-          { text: "Transcribe this audio exactly." }
-        ]
-      }
+/**
+ * Performs specialized Google Maps grounding search.
+ */
+export const mapsGroundingSearch = async (query: string, lat: number, lng: number): Promise<{ text: string, links: any[] }> => {
+    const mapsAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await mapsAi.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: query,
+        config: {
+            tools: [{ googleMaps: {} }],
+            toolConfig: {
+                retrievalConfig: {
+                    latLng: { latitude: lat, longitude: lng }
+                }
+            }
+        }
     });
-    return response.text || "";
-  } catch (e) {
-    console.error("Transcription failed", e);
-    throw e;
-  }
+
+    return {
+        text: response.text || "",
+        links: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
 };
 
-// Text to Speech
-export const generateSpeech = async (text: string): Promise<AudioBuffer> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
+/**
+ * Forensicly analyzes an invoice image.
+ */
+export const analyzeInvoiceImage = async (base64Data: string, mimeType: string): Promise<any> => {
+    const invAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await invAi.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: {
+            parts: [
+                { inlineData: { mimeType, data: base64Data } },
+                { text: `Analyze this construction invoice. Extract: 
+                        1. Vendor Details (Name, Address), 
+                        2. Total Amount, 
+                        3. Due Date, 
+                        4. Itemized Line Items (Description, Quantity, Unit Price). 
+                        Return JSON only.` }
+            ]
+        },
+        config: {
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 4096 }
+        }
+    });
+    return JSON.parse(response.text || "{}");
+};
+
+/**
+ * Executes a deep audit of the entire company database shard.
+ * Ingests multiple datasets for cross-entity logic verification.
+ */
+export const deepRegistryAudit = async (datasets: { projects: any[], ledger: any[], workforce: any[] }): Promise<any> => {
+    const auditAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `
+        Act as a Sovereign AI Auditor for CortexBuildPro.
+        Analyze the following cross-entity datasets for structural and financial drift:
+        - PROJECTS: ${JSON.stringify(datasets.projects)}
+        - LEDGER: ${JSON.stringify(datasets.ledger)}
+        - WORKFORCE: ${JSON.stringify(datasets.workforce)}
+
+        TASK: 
+        1. Identify "Silent Risks" where project delays correlate with workforce skill gaps or pending invoice settlements.
+        2. Propose 3 "Genesis Optimizations" to restore operational baseline.
+        
+        Return valid JSON: { "healthScore": number, "criticalGaps": [], "proposedFixes": [] }
+    `;
+
+    const response = await auditAi.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 32768 } // MAX THINKING BUDGET
+        }
+    });
+    return JSON.parse(response.text || "{}");
+};
+
+/**
+ * Generates speech from text using Gemini 2.5 Flash TTS.
+ */
+export const generateSpeech = async (text: string, voice: string = 'Kore'): Promise<string> => {
+    const ttsAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ttsAi.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text }] }],
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voice as any },
+                },
             },
         },
-      },
     });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("No audio data returned");
-
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
-    
-    // Manual Decode Helper
-    const binaryString = atob(base64Audio);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // Simple Int16 PCM decode to Float32 AudioBuffer
-    const dataInt16 = new Int16Array(bytes.buffer);
-    const frameCount = dataInt16.length; 
-    const buffer = audioContext.createBuffer(1, frameCount, 24000);
-    const channelData = buffer.getChannelData(0);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i] / 32768.0;
-    }
-    
-    return buffer;
-  } catch (e) {
-    console.error("TTS failed", e);
-    throw e;
-  }
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
 };
 
-export interface GenConfig {
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  responseMimeType?: string;
-  systemInstruction?: string;
-  tools?: any[];
-  model?: string;
-  thinkingConfig?: { thinkingBudget: number };
-}
-
-// General prompt runner with model selection and dynamic media support
-export const runRawPrompt = async (
-  prompt: string, 
-  config?: GenConfig,
-  mediaData?: string, // Expects raw base64 string
-  mimeType: string = 'image/jpeg'
-): Promise<string> => {
-  try {
-    const modelName = config?.model || 'gemini-2.5-flash';
+export const runRawPrompt = async (prompt: string, config?: GenConfig, mediaData?: string, mimeType: string = 'image/jpeg'): Promise<string> => {
+    const model = config?.model || 'gemini-3-flash-preview';
+    const parts: any[] = [{ text: prompt }];
+    if (mediaData) parts.push({ inlineData: { mimeType, data: mediaData } });
     
-    const contents: any = {
-        role: 'user',
-        parts: [{ text: prompt }]
-    };
-
-    if (mediaData) {
-        contents.parts.push({
-            inlineData: {
-                mimeType: mimeType,
-                data: mediaData
-            }
-        });
-    }
-
-    const result = await ai.models.generateContent({
-      model: modelName,
-      contents: [contents],
-      config: config
+    const promptAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const result = await promptAi.models.generateContent({
+      model,
+      contents: { parts },
+      config
     });
-    return result.text || "No response text.";
-  } catch (e) {
-    console.error("Raw prompt error:", e);
-    return `Error: ${(e as Error).message}`;
-  }
+    return result.text || "";
 };
 
-// Helper to safely parse JSON from AI models that might wrap output in markdown
 export const parseAIJSON = <T = any>(text: string): T => {
   try {
-    // Try extracting from code block
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match) {
-      return JSON.parse(match[1]);
-    }
-    // Try parsing raw text
-    return JSON.parse(text);
+    return JSON.parse(match ? match[1] : text.trim());
   } catch (e) {
-    console.error("Failed to parse AI JSON:", e);
-    // Attempt basic cleanup for common issues
-    try {
-        const cleaned = text.trim();
-        if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
-             return JSON.parse(cleaned);
-        }
-    } catch (e2) {}
-    
-    throw new Error("Invalid JSON format from AI");
+    throw new Error("Invalid JSON format from logic core.");
   }
 };
 
 export const getLiveClient = () => {
-    return ai.live;
+    const liveAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    return liveAi.live;
+};
+
+export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
+    const transcribeAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await transcribeAi.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+            parts: [
+                { inlineData: { mimeType, data: base64Audio } },
+                { text: "Transcribe exactly. Return only the transcription." }
+            ]
+        }
+    });
+    return response.text || "";
+};
+
+/**
+ * Generates an image using Gemini 2.5 Flash Image.
+ */
+export const generateImage = async (prompt: string, aspectRatio: string = "1:1"): Promise<string> => {
+    const imgAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await imgAi.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            imageConfig: {
+                aspectRatio: aspectRatio as any
+            }
+        }
+    });
+
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+    }
+    throw new Error("Sovereign Forge failed to synthesize the request. Ensure proper API key clearance.");
+};
+
+/**
+ * Analyzes a technical drawing using Gemini 3 Pro.
+ */
+export const analyzeDrawing = async (base64Data: string, mimeType: string): Promise<any> => {
+    const drawingAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await drawingAi.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: {
+            parts: [
+                { inlineData: { mimeType, data: base64Data } },
+                { text: `Act as a professional structural engineer. Analyze this technical drawing. 
+                        Extract: 
+                        1. A high-level technical summary, 
+                        2. Significant Elements and Dimensions, 
+                        3. Estimated Material Quantities (Steel, Concrete, etc.), 
+                        4. Potential Structural Risks.
+                        Return the analysis in a structured JSON format.` }
+            ]
+        },
+        config: {
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 8192 }
+        }
+    });
+    return JSON.parse(response.text || "{}");
+};
+
+/**
+ * Verifies market pricing for construction materials using web grounding.
+ */
+export const checkMarketPricing = async (items: { description: string, price: number }[], location: string): Promise<any> => {
+    const priceAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Perform a real-time market pricing audit for these construction items in ${location}: ${JSON.stringify(items)}. 
+                   Reconcile these prices with current 2025 global and local indices. 
+                   Identify any items that are significantly above or below market nominals.
+                   Return a concise variance report in JSON format: { "analysis": "string", "varianceNodes": [] }.`;
+    const response = await priceAi.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 4096 }
+        }
+    });
+    return JSON.parse(response.text || "{}");
 };

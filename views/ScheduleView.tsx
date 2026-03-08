@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
-  Calendar as CalendarIcon, Filter, Plus, ChevronRight, ChevronDown, 
+  Calendar, Filter, Plus, ChevronRight, ChevronDown, 
   MoreHorizontal, Zap, Flag, ArrowRight, Search, 
   LayoutGrid, List, Clock, User, AlertCircle, CheckCircle2, Loader2, Paperclip,
-  ChevronLeft
+  Maximize2, X, BrainCircuit, AlertTriangle, Sparkles, RotateCcw
 } from 'lucide-react';
 import { runRawPrompt } from '../services/geminiService';
 import { useProjects } from '../contexts/ProjectContext';
@@ -13,54 +13,81 @@ interface ScheduleViewProps {
   projectId?: string;
 }
 
+const DependencyLines = ({ tasks, dayWidth, rowHeight }: any) => {
+    const lines: any[] = [];
+
+    tasks.forEach((task: any, i: number) => {
+        if (task.dependencies && task.dependencies.length > 0) {
+            task.dependencies.forEach((depId: string) => {
+                const depIdx = tasks.findIndex((t: any) => t.id === depId);
+                if (depIdx !== -1) {
+                    const depTask = tasks[depIdx];
+                    const x1 = (depTask.start + depTask.duration - 1) * dayWidth;
+                    const y1 = (depIdx * rowHeight) + (rowHeight / 2);
+                    const x2 = (task.start - 1) * dayWidth;
+                    const y2 = (i * rowHeight) + (rowHeight / 2);
+
+                    lines.push(
+                        <g key={`${depId}-${task.id}`}>
+                            <path 
+                                d={`M ${x1} ${y1} L ${x1 + 10} ${y1} L ${x1 + 10} ${y2} L ${x2} ${y2}`}
+                                fill="none"
+                                stroke="#cbd5e1"
+                                strokeWidth="1.5"
+                                strokeDasharray="4 2"
+                                className="transition-all duration-300 hover:stroke-primary"
+                            />
+                            <circle cx={x2} cy={y2} r="3" fill="#cbd5e1" />
+                        </g>
+                    );
+                }
+            });
+        }
+    });
+
+    return <svg className="absolute inset-0 pointer-events-none z-0" width="100%" height="100%">{lines}</svg>;
+};
+
 const ScheduleView: React.FC<ScheduleViewProps> = ({ projectId }) => {
   const { tasks, documents } = useProjects();
-  const [viewMode, setViewMode] = useState<'GANTT' | 'LIST' | 'CALENDAR'>('GANTT');
+  const [viewMode, setViewMode] = useState<'GANTT' | 'LIST'>('GANTT');
   const [showAIOptimizer, setShowAIOptimizer] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizationResult, setOptimizationResult] = useState<any>(null);
-  const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Helper to check docs
   const hasLinkedDocs = (taskId: string) => {
       return documents.some(d => d.linkedTaskIds?.includes(taskId));
   };
 
-  // Base tasks filtered by project
-  const projectTasks = useMemo(() => {
-      return projectId ? tasks.filter(t => t.projectId === projectId) : tasks;
-  }, [tasks, projectId]);
-
-  // Filter tasks for Gantt/List visualization
   const filteredTasks = useMemo(() => {
+      let projectTasks = projectId ? tasks.filter(t => t.projectId === projectId) : tasks;
+      
       if (projectTasks.length > 0) {
           return projectTasks.map((t, index) => {
-              // Simple logic to convert due date to relative day for demo Gantt
               const today = new Date();
               const due = new Date(t.dueDate);
               const diffTime = Math.abs(due.getTime() - today.getTime());
               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-              // Assuming start date was 5 days ago for demo visual
-              const startDay = Math.max(1, diffDays - 5); 
+              const startDay = Math.max(1, diffDays - 5 + (index * 2)); 
               
               return {
                   id: t.id,
                   name: t.title,
                   start: startDay,
-                  duration: 5, // Default duration for visual
+                  duration: 5,
                   progress: t.status === 'Done' ? 100 : t.status === 'In Progress' ? 50 : 0,
                   type: 'construction',
                   dependencies: t.dependencies || [],
                   assignee: t.assigneeName || 'Unassigned',
                   status: t.status,
                   priority: t.priority,
-                  hasDocs: hasLinkedDocs(t.id),
-                  dueDate: t.dueDate
+                  hasDocs: hasLinkedDocs(t.id)
               };
           });
       }
+      
       return [];
-  }, [projectTasks, documents]);
+  }, [tasks, projectId, documents]);
 
   const runOptimizer = async () => {
       setOptimizing(true);
@@ -94,45 +121,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ projectId }) => {
       }
   };
 
-  // --- Calendar Logic ---
-  const changeMonth = (offset: number) => {
-      const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
-      setCurrentDate(newDate);
-  };
-
-  const getDaysInMonth = (date: Date) => {
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      const days = new Date(year, month + 1, 0).getDate();
-      const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
-      return { days, firstDay };
-  };
-
-  const { days: daysInMonth, firstDay: startDayOffset } = getDaysInMonth(currentDate);
-  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const emptyDays = Array.from({ length: startDayOffset }, (_, i) => i);
-  
-  // Calculate Trailing Days to fill grid
-  const totalSlots = startDayOffset + daysInMonth;
-  const totalRows = Math.ceil(totalSlots / 7);
-  const neededSlots = totalRows * 7;
-  const trailingEmptyDays = Array.from({ length: neededSlots - totalSlots }, (_, i) => i);
-
-  // Get tasks for a specific day
-  const getTasksForDay = (day: number) => {
-      const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toISOString().split('T')[0];
-      // Note: This compares local date string with stored date string. 
-      // For robustness in real app, handle timezones. Here we assume YYYY-MM-DD consistency.
-      // Using formatted string comparison to avoid timezone shift issues with simple Date objects
-      const year = currentDate.getFullYear();
-      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-      const dayStr = String(day).padStart(2, '0');
-      const targetDate = `${year}-${month}-${dayStr}`;
-      
-      return projectTasks.filter(t => t.dueDate === targetDate);
-  };
-
-  // Constants for Gantt rendering
   const dayWidth = 40;
   const rowHeight = 48;
 
@@ -146,242 +134,112 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ projectId }) => {
       }
   };
 
-  const getPriorityColor = (priority: string) => {
-      switch(priority) {
-          case 'Critical': return 'text-red-600 bg-red-50 border-red-100';
-          case 'High': return 'text-orange-600 bg-orange-50 border-orange-100';
-          case 'Medium': return 'text-blue-600 bg-blue-50 border-blue-100';
-          default: return 'text-zinc-600 bg-zinc-50 border-zinc-100';
-      }
-  };
-
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header Toolbar */}
-      <div className="h-16 border-b border-zinc-200 px-6 flex items-center justify-between bg-white flex-shrink-0 z-20">
-        <div className="flex items-center gap-4">
-           <h1 className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-              <CalendarIcon className="text-[#0f5c82]" /> {projectId ? 'Project Schedule' : 'Master Schedule'}
+    <div className="flex flex-col h-full bg-white animate-in fade-in duration-500">
+      <div className="h-20 border-b border-zinc-200 px-10 flex items-center justify-between bg-white flex-shrink-0 z-20 shadow-sm">
+        <div className="flex items-center gap-6">
+           <h1 className="text-xl font-black text-zinc-900 flex items-center gap-3 uppercase tracking-tighter">
+              <Calendar className="text-primary" /> {projectId ? 'Technical Timeline' : 'Master Matrix'}
            </h1>
            <div className="h-6 w-px bg-zinc-200" />
-           
-           {/* View Mode Toggle */}
-           <div className="flex bg-zinc-100 p-1 rounded-lg">
+           <div className="flex bg-zinc-100 p-1.5 rounded-2xl border border-zinc-200 shadow-inner">
               <button 
                 onClick={() => setViewMode('GANTT')}
-                className={`p-1.5 rounded flex items-center gap-2 text-xs font-medium transition-all ${viewMode === 'GANTT' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className={`px-5 py-2.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'GANTT' ? 'bg-white text-primary shadow-md' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
                   <LayoutGrid size={14} /> Gantt
               </button>
               <button 
                 onClick={() => setViewMode('LIST')}
-                className={`p-1.5 rounded flex items-center gap-2 text-xs font-medium transition-all ${viewMode === 'LIST' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className={`px-5 py-2.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'LIST' ? 'bg-white text-primary shadow-md' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
                   <List size={14} /> List
               </button>
-              <button 
-                onClick={() => setViewMode('CALENDAR')}
-                className={`p-1.5 rounded flex items-center gap-2 text-xs font-medium transition-all ${viewMode === 'CALENDAR' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-              >
-                  <CalendarIcon size={14} /> Calendar
-              </button>
            </div>
-
-           {/* Calendar Controls */}
-           {viewMode === 'CALENDAR' && (
-               <div className="flex items-center gap-2 ml-4 animate-in fade-in slide-in-from-left-2">
-                   <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-zinc-100 rounded-full text-zinc-500">
-                       <ChevronLeft size={20} />
-                   </button>
-                   <span className="text-sm font-bold text-zinc-800 w-32 text-center">
-                       {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                   </span>
-                   <button onClick={() => changeMonth(1)} className="p-1 hover:bg-zinc-100 rounded-full text-zinc-500">
-                       <ChevronRight size={20} />
-                   </button>
-                   <button 
-                      onClick={() => setCurrentDate(new Date())}
-                      className="ml-2 text-xs font-medium text-[#0f5c82] hover:underline"
-                   >
-                      Today
-                   </button>
-               </div>
-           )}
         </div>
 
         <div className="flex items-center gap-3">
             <button 
                 onClick={() => { setShowAIOptimizer(!showAIOptimizer); if(!optimizationResult) runOptimizer(); }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
                     showAIOptimizer 
                     ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-inner' 
-                    : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-sm'
                 }`}
             >
                 <Zap size={16} className={showAIOptimizer ? 'fill-purple-700' : ''} /> AI Optimizer
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-[#0f5c82] text-white rounded-lg text-sm font-medium hover:bg-[#0c4a6e] shadow-sm">
-                <Plus size={16} /> Add Task
+            <button className="bg-primary text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#0c4a6e] shadow-xl shadow-blue-900/10 active:scale-95 transition-all">
+                <Plus size={18} /> New Milestone
             </button>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-         {/* Main Content Area */}
-         
-         {/* --- CALENDAR VIEW --- */}
-         {viewMode === 'CALENDAR' && (
-             <div className="flex-1 overflow-y-auto bg-zinc-50 p-6">
-                 <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
-                     {/* Days Header */}
-                     <div className="grid grid-cols-7 border-b border-zinc-200 bg-zinc-50/50">
-                         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                             <div key={day} className="py-3 text-center text-xs font-bold text-zinc-400 uppercase">
-                                 {day}
-                             </div>
-                         ))}
-                     </div>
-                     
-                     {/* Calendar Grid */}
-                     <div className="grid grid-cols-7 auto-rows-fr bg-zinc-200 gap-px border-b border-zinc-200">
-                         {emptyDays.map(d => (
-                             <div key={`empty-${d}`} className="bg-zinc-50/30 min-h-[120px]" />
-                         ))}
-                         
-                         {calendarDays.map(day => {
-                             const dayTasks = getTasksForDay(day);
-                             const isToday = 
-                                day === new Date().getDate() && 
-                                currentDate.getMonth() === new Date().getMonth() && 
-                                currentDate.getFullYear() === new Date().getFullYear();
-
-                             return (
-                                 <div key={day} className={`bg-white min-h-[120px] p-2 hover:bg-blue-50/20 transition-colors relative group ${isToday ? 'bg-blue-50/30' : ''}`}>
-                                     <div className="flex justify-between items-start mb-2">
-                                         <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#0f5c82] text-white' : 'text-zinc-700'}`}>
-                                             {day}
-                                         </span>
-                                         {dayTasks.length > 0 && (
-                                             <span className="text-[10px] text-zinc-400 font-medium">{dayTasks.length} tasks</span>
-                                         )}
-                                     </div>
-                                     
-                                     <div className="space-y-1">
-                                         {dayTasks.map(task => (
-                                             <div 
-                                                key={task.id} 
-                                                className={`text-[10px] px-2 py-1 rounded border truncate cursor-pointer shadow-sm hover:shadow-md transition-all ${
-                                                    task.status === 'Done' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                    task.status === 'Blocked' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                    task.priority === 'Critical' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                    'bg-white text-zinc-700 border-zinc-200'
-                                                }`}
-                                                title={`${task.title} - ${task.assigneeName}`}
-                                             >
-                                                 {task.title}
-                                             </div>
-                                         ))}
-                                     </div>
-                                     
-                                     {/* Hover Add Button */}
-                                     <button className="absolute bottom-2 right-2 p-1.5 bg-zinc-100 rounded-full text-zinc-400 hover:text-[#0f5c82] hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-all">
-                                         <Plus size={14} />
-                                     </button>
-                                 </div>
-                             );
-                         })}
-
-                         {trailingEmptyDays.map(d => (
-                             <div key={`trail-${d}`} className="bg-zinc-50/30 min-h-[120px]" />
-                         ))}
-                     </div>
-                 </div>
-             </div>
-         )}
-
-         {/* --- GANTT VIEW --- */}
-         {viewMode === 'GANTT' && (
+         {viewMode === 'GANTT' ? (
              <>
-                 {/* Task List Sidebar (Left) */}
-                 <div className="w-80 border-r border-zinc-200 flex flex-col bg-white z-10 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
-                    <div className="h-[60px] border-b border-zinc-200 flex items-center px-4 bg-zinc-50 font-bold text-xs text-zinc-500 uppercase tracking-wider">
-                        Task Name
+                 <div className="w-80 border-r border-zinc-200 flex flex-col bg-white z-10 shadow-2xl">
+                    <div className="h-[60px] border-b border-zinc-200 flex items-center px-6 bg-zinc-50 font-black text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
+                        Objective Matrix
                     </div>
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
                         {filteredTasks.map((task, i) => (
                             <div 
                                 key={i} 
-                                className="h-[48px] flex items-center px-4 border-b border-zinc-50 hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                                className="h-[48px] flex items-center px-6 border-b border-zinc-50 hover:bg-blue-50/50 transition-colors group cursor-pointer"
                             >
-                                <div className="flex-1 flex items-center gap-2 min-w-0">
-                                    <span className="text-zinc-400 text-xs font-mono w-4">{i+1}</span>
-                                    <div className={`w-2 h-2 rounded-full ${task.type === 'milestone' ? 'bg-amber-500 rotate-45' : 'bg-[#0f5c82]'}`} />
-                                    <span className="text-sm font-medium text-zinc-800 truncate">{task.name}</span>
+                                <div className="flex-1 flex items-center gap-3 min-w-0">
+                                    <span className="text-zinc-400 font-mono text-[9px] w-4">{i+1}</span>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${task.status === 'Done' ? 'bg-green-500' : 'bg-primary'}`} />
+                                    <span className="text-[11px] font-black text-zinc-800 truncate uppercase tracking-tight">{task.name}</span>
                                     {task.hasDocs && <Paperclip size={10} className="text-blue-500 flex-shrink-0" />}
                                 </div>
-                                <button className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-[#0f5c82]">
-                                    <MoreHorizontal size={14} />
-                                </button>
                             </div>
                         ))}
-                        {filteredTasks.length === 0 && (
-                            <div className="p-4 text-center text-zinc-400 text-sm">No tasks scheduled.</div>
-                        )}
                     </div>
                  </div>
 
-                 {/* Gantt Chart Area (Right) */}
-                 <div className="flex-1 overflow-auto relative bg-zinc-50/50" style={{ scrollBehavior: 'smooth' }}>
-                    <div className="min-w-[1200px] relative">
-                        
-                        {/* Timeline Header */}
+                 <div className="flex-1 overflow-auto relative bg-zinc-50/30" style={{ scrollBehavior: 'smooth' }}>
+                    <div className="min-w-[1500px] relative h-full">
                         <div className="sticky top-0 z-10 bg-white border-b border-zinc-200 h-[60px] flex">
-                            {[...Array(30)].map((_, i) => (
+                            {[...Array(40)].map((_, i) => (
                                 <div key={i} className="flex-shrink-0 border-r border-zinc-100 flex flex-col justify-end pb-2 items-center" style={{ width: dayWidth }}>
-                                    <span className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Day</span>
-                                    <span className={`text-sm font-bold ${i % 7 === 0 || i % 7 === 6 ? 'text-red-400' : 'text-zinc-700'}`}>
+                                    <span className="text-[8px] font-black text-zinc-400 uppercase mb-1">D</span>
+                                    <span className={`text-[10px] font-black ${i % 7 === 0 || i % 7 === 6 ? 'text-red-400' : 'text-zinc-700'}`}>
                                         {i + 1}
                                     </span>
                                 </div>
                             ))}
                         </div>
 
-                        {/* Grid Lines */}
                         <div className="absolute inset-0 top-[60px] pointer-events-none flex">
-                            {[...Array(30)].map((_, i) => (
-                                <div key={i} className={`flex-shrink-0 border-r h-full ${i % 7 === 0 || i % 7 === 6 ? 'bg-zinc-50 border-zinc-200/50' : 'border-zinc-100'}`} style={{ width: dayWidth }} />
+                            {[...Array(40)].map((_, i) => (
+                                <div key={i} className={`flex-shrink-0 border-r h-full ${i % 7 === 0 || i % 7 === 6 ? 'bg-zinc-50 border-zinc-100/50' : 'border-zinc-50'}`} style={{ width: dayWidth }} />
                             ))}
-                            {/* Current Day Indicator */}
                             <div className="absolute top-0 bottom-0 border-l-2 border-red-500 z-0" style={{ left: 8 * dayWidth + (dayWidth/2) }}>
-                                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-red-500 rounded-full shadow-[0_0_8px_red]" />
                             </div>
                         </div>
 
-                        {/* Task Bars */}
-                        <div className="relative pt-0">
+                        <div className="relative pt-0 min-h-full">
+                            <DependencyLines tasks={filteredTasks} dayWidth={dayWidth} rowHeight={rowHeight} />
                             {filteredTasks.map((task, i) => (
                                 <div key={i} className="relative group" style={{ height: rowHeight }}>
-                                    {/* Bar */}
                                     <div 
-                                        className={`absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm border border-white/20 flex items-center px-2 overflow-hidden transition-all hover:shadow-md cursor-pointer ${
-                                            task.type === 'milestone' ? 'bg-amber-500 w-6 h-6 rotate-45 rounded-sm' : 
-                                            'bg-[#0f5c82] h-7'
-                                        }`}
+                                        className={`absolute top-1/2 -translate-y-1/2 rounded-lg shadow-sm border border-white/20 flex items-center px-3 overflow-hidden transition-all hover:shadow-2xl hover:scale-[1.02] cursor-pointer z-10 ${
+                                            task.status === 'Done' ? 'bg-green-500' : 
+                                            task.priority === 'Critical' ? 'bg-red-500' :
+                                            'bg-primary'
+                                        } h-8`}
                                         style={{ 
                                             left: (task.start - 1) * dayWidth, 
-                                            width: task.type === 'milestone' ? 24 : task.duration * dayWidth 
+                                            width: task.duration * dayWidth 
                                         }}
                                     >
-                                        {task.type !== 'milestone' && (
-                                            <>
-                                                {/* Progress Fill */}
-                                                <div className="absolute top-0 left-0 bottom-0 bg-black/20" style={{ width: `${task.progress}%` }} />
-                                                <span className="relative text-[10px] font-bold text-white truncate px-1 drop-shadow-md flex items-center gap-1">
-                                                    {task.progress}%
-                                                    {task.hasDocs && <Paperclip size={8} className="text-blue-200" />}
-                                                </span>
-                                            </>
-                                        )}
+                                        <div className="absolute top-0 left-0 bottom-0 bg-black/10" style={{ width: `${task.progress}%` }} />
+                                        <span className="relative text-[9px] font-black text-white truncate drop-shadow-md uppercase tracking-widest">
+                                            {task.progress}% - {task.assignee.split(' ')[0]}
+                                        </span>
                                     </div>
                                 </div>
                             ))}
@@ -389,62 +247,45 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ projectId }) => {
                     </div>
                  </div>
              </>
-         )}
-
-         {/* --- LIST VIEW --- */}
-         {viewMode === 'LIST' && (
-             <div className="flex-1 overflow-y-auto p-6 bg-zinc-50">
-                 <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
+         ) : (
+             <div className="flex-1 overflow-y-auto p-10 bg-zinc-50/50">
+                 <div className="bg-white border border-zinc-200 rounded-[3rem] shadow-xl overflow-hidden">
                      <table className="w-full text-left text-sm">
-                         <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 uppercase text-xs">
+                         <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-400 uppercase text-[10px] font-black tracking-[0.2em]">
                              <tr>
-                                 <th className="px-6 py-4 font-bold">Task Name</th>
-                                 <th className="px-6 py-4 font-bold">Assignee</th>
-                                 <th className="px-6 py-4 font-bold">Status</th>
-                                 <th className="px-6 py-4 font-bold">Priority</th>
-                                 <th className="px-6 py-4 font-bold">Start Day</th>
-                                 <th className="px-6 py-4 font-bold">Duration</th>
-                                 <th className="px-6 py-4 font-bold text-right">Actions</th>
+                                 <th className="px-8 py-6">Objective Shard</th>
+                                 <th className="px-8 py-6 text-center">Inference Status</th>
+                                 <th className="px-8 py-6">Target</th>
+                                 <th className="px-8 py-6 text-right"></th>
                              </tr>
                          </thead>
-                         <tbody className="divide-y divide-zinc-100">
+                         <tbody className="divide-y divide-zinc-50">
                              {filteredTasks.map((task, i) => (
-                                 <tr key={i} className="hover:bg-zinc-50/50 transition-colors group">
-                                     <td className="px-6 py-4">
-                                         <div className="flex items-center gap-3">
-                                             {task.type === 'milestone' ? (
-                                                 <div className="w-3 h-3 bg-amber-500 rotate-45 rounded-[1px]" />
-                                             ) : (
-                                                 <div className="w-4 h-4 border-2 border-zinc-300 rounded-full" />
-                                             )}
-                                             <span className="font-medium text-zinc-900">{task.name}</span>
-                                             {task.hasDocs && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded border border-blue-100"><Paperclip size={10} /></span>}
+                                 <tr key={i} className="hover:bg-zinc-50/50 transition-colors group cursor-pointer">
+                                     <td className="px-8 py-8">
+                                         <div className="flex items-center gap-4">
+                                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shadow-sm ${task.status === 'Done' ? 'bg-green-50 text-green-600' : 'bg-primary/10 text-primary'}`}>
+                                                 {i+1}
+                                             </div>
+                                             <div>
+                                                <div className="font-black text-zinc-900 text-base uppercase tracking-tight">{task.name}</div>
+                                                <div className="text-[10px] font-bold text-zinc-400 uppercase mt-1 flex items-center gap-2">
+                                                    <User size={10} /> {task.assignee}
+                                                </div>
+                                             </div>
                                          </div>
                                      </td>
-                                     <td className="px-6 py-4">
-                                         <div className="flex items-center gap-2 text-zinc-600">
-                                             <User size={14} /> {task.assignee}
-                                         </div>
-                                     </td>
-                                     <td className="px-6 py-4">
-                                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                                     <td className="px-8 py-8 text-center">
+                                         <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border border-current ${getStatusColor(task.status)}`}>
                                              {task.status}
                                          </span>
                                      </td>
-                                     <td className="px-6 py-4">
-                                          <span className={`px-2 py-1 rounded text-xs font-bold border ${getPriorityColor(task.priority)}`}>
-                                              {task.priority}
-                                          </span>
-                                     </td>
-                                     <td className="px-6 py-4 text-zinc-600">
+                                     <td className="px-8 py-8 font-mono text-xs font-black text-zinc-500">
                                          Day {task.start}
                                      </td>
-                                     <td className="px-6 py-4 text-zinc-600">
-                                         {task.duration} days
-                                     </td>
-                                     <td className="px-6 py-4 text-right">
-                                         <button className="text-zinc-400 hover:text-[#0f5c82]">
-                                             <MoreHorizontal size={16} />
+                                     <td className="px-8 py-8 text-right">
+                                         <button className="p-3 bg-zinc-100 text-zinc-400 hover:text-primary rounded-xl transition-all shadow-sm active:scale-90">
+                                             <Maximize2 size={16} />
                                          </button>
                                      </td>
                                  </tr>
@@ -455,72 +296,90 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ projectId }) => {
              </div>
          )}
 
-         {/* AI Optimizer Sidebar */}
          {showAIOptimizer && (
-             <div className="w-80 bg-white border-l border-zinc-200 shadow-xl z-30 flex flex-col animate-in slide-in-from-right">
-                 <div className="p-4 border-b border-zinc-200 bg-purple-50 flex justify-between items-center">
-                     <h3 className="font-bold text-purple-900 flex items-center gap-2">
-                         <Zap size={18} className="fill-purple-700 text-purple-700" /> Schedule Optimizer
-                     </h3>
-                     <button onClick={() => setShowAIOptimizer(false)} className="text-purple-700 hover:bg-purple-100 rounded p-1">
-                         <ArrowRight size={16} />
+             <div className="w-[400px] bg-white border-l border-zinc-200 shadow-[0_0_50px_rgba(0,0,0,0.1)] z-30 flex flex-col animate-in slide-in-from-right duration-500">
+                 <div className="p-8 border-b border-zinc-100 bg-purple-50/50 flex justify-between items-center shrink-0">
+                     <div className="flex items-center gap-4">
+                         <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-xl shadow-purple-900/20">
+                            <Zap size={20} className="fill-current" />
+                         </div>
+                         <h3 className="font-black text-zinc-900 uppercase tracking-tighter text-lg">Logic Optimizer</h3>
+                     </div>
+                     <button onClick={() => setShowAIOptimizer(false)} className="p-2 text-purple-700 hover:bg-purple-100 rounded-full transition-all">
+                         <X size={20} />
                      </button>
                  </div>
                  
-                 <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                 <div className="flex-1 p-8 overflow-y-auto space-y-8 custom-scrollbar">
                      {optimizing ? (
-                         <div className="flex flex-col items-center justify-center h-40 text-zinc-500 space-y-3">
-                             <Loader2 size={24} className="animate-spin text-purple-600" />
-                             <p className="text-xs">Analyzing critical path with reasoning...</p>
+                         <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-pulse">
+                             <div className="relative">
+                                 <div className="w-20 h-20 border-4 border-zinc-100 border-t-purple-600 rounded-full animate-spin" />
+                                 <BrainCircuit size={32} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-purple-600" />
+                             </div>
+                             <div>
+                                <p className="text-sm font-black text-zinc-900 uppercase tracking-widest">Architectural Inference</p>
+                                <p className="text-[10px] text-zinc-500 mt-2 uppercase font-bold tracking-tight">Simulating 1M+ scheduling variations...</p>
+                             </div>
                          </div>
                      ) : optimizationResult ? (
-                         <>
-                             <div className={`bg-white border rounded-xl p-4 shadow-sm ${
-                                 optimizationResult.riskLevel === 'High' ? 'border-red-200 bg-red-50' : 'border-purple-100'
+                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                             <div className={`p-6 rounded-[2rem] border-2 shadow-inner relative overflow-hidden group ${
+                                 optimizationResult.riskLevel === 'High' ? 'border-red-100 bg-red-50 text-red-900' : 'border-emerald-100 bg-emerald-50 text-emerald-900'
                              }`}>
-                                 <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Analysis Result</div>
-                                 <p className="text-sm text-zinc-700 leading-relaxed mb-2">
-                                     {optimizationResult.riskAnalysis}
-                                 </p>
-                                 <div className={`text-xs font-bold px-2 py-1 rounded inline-block ${
-                                     optimizationResult.riskLevel === 'High' ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'
-                                 }`}>
-                                     {optimizationResult.riskLevel} Risk
+                                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform"><AlertTriangle size={60} /></div>
+                                 <div className="text-[9px] font-black uppercase tracking-[0.2em] mb-4 flex justify-between items-center">
+                                    <span>Portfolio Alert</span>
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-black border ${optimizationResult.riskLevel === 'High' ? 'border-red-200 bg-red-100' : 'border-emerald-200 bg-emerald-100'}`}>
+                                        {optimizationResult.riskLevel} Criticality
+                                    </span>
                                  </div>
+                                 <p className="text-sm font-medium leading-relaxed italic">
+                                     "{optimizationResult.riskAnalysis}"
+                                 </p>
                              </div>
 
-                             <div>
-                                 <div className="text-xs font-bold text-zinc-500 uppercase mb-2">Recommendations</div>
-                                 <div className="space-y-2">
+                             <div className="space-y-4">
+                                 <div className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] px-1 flex items-center gap-2">
+                                     <Sparkles size={14} className="text-purple-500" /> Strategy Recommender
+                                 </div>
+                                 <div className="space-y-3">
                                      {optimizationResult.recommendations?.map((rec: any, i: number) => (
-                                         <div key={i} className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm hover:bg-blue-100 cursor-pointer transition-colors">
-                                             <div className="font-bold text-blue-800 mb-1">{rec.title}</div>
-                                             <p className="text-blue-700 text-xs">{rec.desc}</p>
+                                         <div key={i} className="p-5 bg-white border border-zinc-100 rounded-3xl text-sm hover:border-primary hover:shadow-xl transition-all group/rec cursor-pointer">
+                                             <div className="flex justify-between items-start mb-2">
+                                                <div className="font-black text-zinc-900 uppercase tracking-tight group-hover/rec:text-primary transition-colors">{rec.title}</div>
+                                                <ArrowRight size={14} className="text-zinc-300 group-hover/rec:text-primary group-hover/rec:translate-x-1 transition-all" />
+                                             </div>
+                                             <p className="text-[11px] text-zinc-500 font-medium leading-relaxed">"{rec.desc}"</p>
                                          </div>
                                      ))}
                                  </div>
                              </div>
 
-                             <div className="pt-4 border-t border-zinc-100">
-                                 <button className="w-full py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 shadow-sm">
-                                     Apply Top Recommendations
+                             <div className="pt-6 border-t border-zinc-100">
+                                 <button className="w-full py-5 bg-zinc-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-primary transition-all shadow-2xl active:scale-95">
+                                     Inject Proposed Logic
                                  </button>
                              </div>
-                         </>
+                         </div>
                      ) : (
-                         <div className="text-center text-zinc-400 text-sm py-10">
-                             Click run to analyze schedule risks.
+                         <div className="h-full flex flex-col items-center justify-center text-center p-10 space-y-6">
+                             <div className="w-16 h-16 bg-zinc-50 rounded-[1.5rem] border border-zinc-100 flex items-center justify-center text-zinc-300">
+                                <Zap size={32} />
+                             </div>
+                             <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest leading-relaxed">Initialize the Gemini inference engine to detect critical path bottlenecks.</p>
+                             <button onClick={runOptimizer} className="text-primary font-black uppercase text-[10px] tracking-widest hover:underline decoration-2">Start Logic Pulse</button>
                          </div>
                      )}
                  </div>
                  
-                 <div className="p-4 border-t border-zinc-200">
+                 <div className="p-8 border-t border-zinc-100 bg-zinc-50/50">
                      <button 
                         onClick={runOptimizer} 
                         disabled={optimizing}
-                        className="w-full py-2 border border-purple-200 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 flex items-center justify-center gap-2"
+                        className="w-full py-4 border-2 border-purple-200 text-purple-700 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-600 hover:text-white hover:border-purple-600 transition-all flex items-center justify-center gap-3 shadow-lg active:scale-95 disabled:opacity-50"
                      >
-                         <Zap size={14} /> Re-Run Analysis
+                         <RotateCcw size={16} /> Refresh Inference
                      </button>
                  </div>
              </div>

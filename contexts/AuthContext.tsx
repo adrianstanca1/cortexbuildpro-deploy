@@ -1,28 +1,25 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { UserProfile, UserRole } from '../types';
 
-interface OAuthUser {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  provider: 'github' | 'google';
-}
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { UserProfile, UserRole, FeatureEntitlements, Permission, ROLE_PERMISSIONS, AuditLog, UserStatus } from '../types';
+import { db } from '../services/db';
 
 interface AuthContextType {
   user: UserProfile | null;
-  login: (role: UserRole) => void;
-  loginWithOAuth: (oauthUser: OAuthUser) => void;
+  isLoading: boolean;
+  signIn: (email: string, password?: string) => Promise<void>;
+  signUp: (data: Partial<UserProfile>, password?: string) => Promise<void>;
   logout: () => void;
   hasPermission: (allowedRoles: UserRole[]) => boolean;
+  can: (permission: Permission) => boolean;
+  checkFeature: (feature: keyof FeatureEntitlements) => boolean;
   addProjectId: (id: string) => void;
-  token: string | null;
+  impersonateTenant: (companyId: string, companyName: string) => void;
+  stopImpersonating: () => void;
+  isImpersonating: boolean;
+  impersonatedTenantName: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const AUTH_STORAGE_KEY = 'buildpro_auth';
-const TOKEN_STORAGE_KEY = 'buildpro_token';
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -34,140 +31,147 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [impersonatedTenantName, setImpersonatedTenantName] = useState<string | null>(null);
+  const [originalUser, setOriginalUser] = useState<UserProfile | null>(null);
 
-  // Load user from localStorage on mount
   useEffect(() => {
-    const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
-    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-
-    if (storedAuth) {
+    const initAuth = async () => {
+      // Ensure DB is seeded and ready before we decide on loading state
       try {
-        const parsedUser = JSON.parse(storedAuth);
-        setUser(parsedUser);
+        const database = await db.getUser('trigger-open'); // This will trigger open and wait for seeding
       } catch (e) {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
+        // Ignore failure of the trigger, it's just to ensure open() finished
       }
-    }
 
-    if (storedToken) {
-      setToken(storedToken);
-    }
+      const storedToken = localStorage.getItem('buildpro_session_shard');
+      if (storedToken) {
+        try {
+          const userId = storedToken.split('_')[1];
+          const userData = await db.getUser(userId);
+          if (userData) {
+            setUser(userData);
+          } else {
+            localStorage.removeItem('buildpro_session_shard');
+          }
+        } catch (e) {
+          localStorage.removeItem('buildpro_session_shard');
+        }
+      }
+      setIsLoading(false);
+    };
+    initAuth();
   }, []);
 
-  const login = (role: UserRole) => {
-    // Simulating backend user retrieval based on role selection
-    let mockUser: UserProfile;
-
-    switch (role) {
-      case UserRole.SUPER_ADMIN:
-        mockUser = {
-          id: 'u1',
-          name: 'John Anderson',
-          email: 'john@buildcorp.com',
-          phone: '+44 7700 900001',
-          role: UserRole.SUPER_ADMIN,
-          avatarInitials: 'JA',
-          companyId: 'ALL',
-          projectIds: ['ALL']
-        };
-        break;
-      case UserRole.COMPANY_ADMIN:
-        mockUser = {
-          id: 'u2',
-          name: 'Sarah Mitchell',
-          email: 'sarah@buildcorp.com',
-          phone: '+44 7700 900002',
-          role: UserRole.COMPANY_ADMIN,
-          avatarInitials: 'SM',
-          companyId: 'c1',
-          projectIds: ['p1', 'p2']
-        };
-        break;
-      case UserRole.SUPERVISOR:
-        mockUser = {
-          id: 'u3',
-          name: 'Mike Thompson',
-          email: 'mike@buildcorp.com',
-          phone: '+44 7700 900003',
-          role: UserRole.SUPERVISOR,
-          avatarInitials: 'MT',
-          companyId: 'c1',
-          projectIds: ['p1']
-        };
-        break;
-      case UserRole.OPERATIVE:
-        mockUser = {
-          id: 'u4',
-          name: 'David Chen',
-          email: 'david@buildcorp.com',
-          phone: '+44 7700 900004',
-          role: UserRole.OPERATIVE,
-          avatarInitials: 'DC',
-          companyId: 'c1',
-          projectIds: ['p1']
-        };
-        break;
-      default:
-        return;
-    }
-    setUser(mockUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockUser));
-  };
-
-  const loginWithOAuth = (oauthUser: OAuthUser) => {
-    // Map OAuth user to UserProfile
-    const userProfile: UserProfile = {
-      id: oauthUser.id,
-      name: oauthUser.name,
-      email: oauthUser.email,
-      phone: '',
-      role: UserRole.OPERATIVE, // Default role for OAuth users - minimal privileges
-      avatarInitials: oauthUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-      avatarUrl: oauthUser.avatarUrl,
-      companyId: 'c1',
-      projectIds: [],
-      provider: oauthUser.provider,
+  const logAudit = async (action: string, targetId: string, reason: string, metadata?: any) => {
+    if (!user) return;
+    const log: AuditLog = {
+      id: `audit-${Date.now()}`,
+      actorId: user.id,
+      actorName: user.name,
+      action,
+      targetId,
+      targetType: 'COMPANY',
+      tenantId: targetId,
+      timestamp: new Date().toISOString(),
+      reason,
+      metadata
     };
-
-    setUser(userProfile);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
+    await db.addAuditLog(log);
   };
 
-  const logout = async () => {
-    // Call logout endpoint if we have a token
-    if (token) {
+  const signIn = async (email: string, password?: string) => {
+    setIsLoading(true);
+    try {
+        const userData = await db.getByUserEmail(email.toLowerCase());
+        if (!userData) throw new Error("Identity node not found in global mesh.");
+        
+        // Removed status and MFA checks for direct access
+        setUser(userData);
+        localStorage.setItem('buildpro_session_shard', `session_${userData.id}`);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const signUp = async (data: Partial<UserProfile>, password?: string) => {
+      setIsLoading(true);
       try {
-        await fetch('/api/auth/github/logout', { method: 'POST' });
-      } catch (e) {
-        // Ignore logout errors
+          const id = `u-${Date.now()}`;
+          const normalizedEmail = data.email?.toLowerCase() || '';
+          const newUser: UserProfile = {
+              id,
+              name: data.name || 'Anonymous Node',
+              email: normalizedEmail,
+              role: data.role || UserRole.OPERATIVE,
+              status: 'ACTIVE', // Automatically set to active
+              phone: data.phone || '',
+              companyId: data.companyId || `c-genesis-01`, // Default to genesis shard
+              projectIds: [],
+              avatarInitials: data.name?.split(' ').map(n => n[0]).join('').toUpperCase() || '??',
+              features: {
+                  aiAssistant: true,
+                  imagineStudio: true,
+                  financials: true,
+                  advancedRBAC: false,
+                  liveVision: true,
+                  bimAnalytics: true
+              },
+              createdAt: new Date().toISOString()
+          };
+          await db.saveUser(newUser);
+          setUser(newUser);
+          localStorage.setItem('buildpro_session_shard', `session_${newUser.id}`);
+      } finally {
+          setIsLoading(false);
       }
-    }
+  };
 
+  const impersonateTenant = (companyId: string, companyName: string) => {
+    if (!can(Permission.BREAK_GLASS_ACCESS)) return;
+    if (!originalUser) setOriginalUser(user);
+    logAudit('IMPERSONATION_STARTED', companyId, `Break-Glass access requested for ${companyName}`);
+    setUser({ ...user!, companyId, projectIds: ['ALL'] });
+    setIsImpersonating(true);
+    setImpersonatedTenantName(companyName);
+  };
+
+  const stopImpersonating = () => {
+    if (originalUser) {
+      setUser(originalUser);
+      setOriginalUser(null);
+      setIsImpersonating(false);
+      setImpersonatedTenantName(null);
+    }
+  };
+
+  const logout = () => {
     setUser(null);
-    setToken(null);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem('buildpro_session_shard');
   };
 
-  const hasPermission = (allowedRoles: UserRole[]) => {
-    if (!user) return false;
-    return allowedRoles.includes(user.role);
+  const hasPermission = (allowedRoles: UserRole[]) => user ? allowedRoles.includes(user.role) : false;
+  const can = (perm: Permission): boolean => user ? (ROLE_PERMISSIONS[user.role] || []).includes(perm) : false;
+  const checkFeature = (feat: keyof FeatureEntitlements): boolean => {
+      if (!user) return false;
+      if (user.role === UserRole.SUPER_ADMIN && !isImpersonating) return true;
+      return user.features?.[feat] || false;
   };
 
-  const addProjectId = (projectId: string) => {
-    if (user && user.projectIds && !user.projectIds.includes(projectId) && !user.projectIds.includes('ALL')) {
-        const updatedUser = {
-            ...user,
-            projectIds: [...user.projectIds, projectId]
-        };
-        setUser(updatedUser);
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
-    }
+  const addProjectId = (pid: string) => {
+      if (user && !user.projectIds?.includes(pid)) {
+          const updated = { ...user, projectIds: [...(user.projectIds || []), pid] };
+          setUser(updated);
+          db.saveUser(updated);
+      }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithOAuth, logout, hasPermission, addProjectId, token }}>
+    <AuthContext.Provider value={{ 
+      user, isLoading, signIn, signUp, logout, hasPermission, can, checkFeature, addProjectId, 
+      impersonateTenant, stopImpersonating, isImpersonating, impersonatedTenantName
+    }}>
       {children}
     </AuthContext.Provider>
   );

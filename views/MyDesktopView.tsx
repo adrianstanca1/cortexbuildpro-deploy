@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Monitor, X, Minus, Square, Power, Search, Grid, 
@@ -734,11 +735,12 @@ const MyDesktopView: React.FC<MyDesktopViewProps> = ({ installedApps, setPage })
     { id: 'live-map', title: 'Live Map', icon: Navigation, content: <div className="h-full w-full bg-zinc-50 overflow-hidden"><LiveProjectMapView /></div>, width: 1000, height: 700 },
     
     // Main Platform Views as Windows
-    { id: 'projects', title: 'Projects', icon: Briefcase, content: <div className="h-full overflow-y-auto bg-zinc-50"><ProjectsView /></div>, width: 1000, height: 700 },
+    // Fixed: Passed setPage prop to ProjectsView
+    { id: 'projects', title: 'Projects', icon: Briefcase, content: <div className="h-full overflow-y-auto bg-zinc-50"><ProjectsView setPage={setPage} /></div>, width: 1000, height: 700 },
     { id: 'team', title: 'Team Hub', icon: Layers, content: <div className="h-full overflow-y-auto bg-zinc-50"><TeamView /></div>, width: 900, height: 600 },
     { id: 'safety', title: 'Safety Mgr', icon: Shield, content: <div className="h-full overflow-y-auto bg-zinc-50"><SafetyView /></div>, width: 900, height: 600 },
     { id: 'chat', title: 'AI Chat', icon: MessageSquare, content: <ChatView setPage={() => {}} />, width: 500, height: 700 },
-  ], [fileSystem, installedApps]); // Re-create if FS changes for new Notepad instances
+  ], [fileSystem, installedApps, setPage]); // Re-create if FS changes for new Notepad instances
 
   const handleIconClick = (app: any) => {
     openApp(app.id, app.title, app.icon, app.content, app.width, app.height);

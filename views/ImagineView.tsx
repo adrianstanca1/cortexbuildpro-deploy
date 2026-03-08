@@ -6,84 +6,93 @@ import {
   CheckCircle2, FileText, Upload, X, ImageIcon, Layers,
   Map, ClipboardCheck, Check, Calculator, Activity,
   Info, AlertOctagon, HelpCircle, Briefcase, Save, CheckSquare,
-  Video, Play, Ratio, ScanLine, Target, Zap, ArrowRight, StopCircle, MessageSquare, Send, Eye, Camera, Maximize2, BrainCircuit
+  Video, Play, Ratio, ScanLine, Target, Zap, ArrowRight, StopCircle, MessageSquare, Send, Eye, Camera, Maximize2, BrainCircuit,
+  // Added missing Radio icon to imports
+  Mic, MicOff, FileSearch, TrendingUp, ShieldCheck, PenTool, Pencil, Sparkles, Layout, Radio
 } from 'lucide-react';
-import { generateImage, generateVideo, runRawPrompt } from '../services/geminiService';
-import { GeneratedImage, ProjectDocument, Task } from '../types';
+import { generateImage, runRawPrompt, parseAIJSON } from '../services/geminiService';
+import { GeneratedImage } from '../types';
 import { useProjects } from '../contexts/ProjectContext';
 
-type Mode = 'CREATE_IMAGE' | 'CREATE_VIDEO' | 'LIVE_FEED' | 'INSPECT';
+type Mode = 'CREATE_IMAGE' | 'INSPECT' | 'REFINE' | 'LIVE_FEED';
 type AnalysisMode = 'SAFETY' | 'QUALITY' | 'PROGRESS';
 
-const ImagineView: React.FC = () => {
-  const { projects, addDocument, addTask } = useProjects();
-  const [mode, setMode] = useState<Mode>('CREATE_IMAGE');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+interface AnalysisItem {
+    title: string;
+    description: string;
+    severity: 'High' | 'Medium' | 'Low' | 'Info' | 'CRITICAL' | 'WARNING' | 'PASS';
+    mitigation?: string;
+}
 
-  // --- Imagine State (Image/Video) ---
+const ImagineView: React.FC = () => {
+  const { setAiProcessing } = useProjects();
+  const [mode, setMode] = useState<Mode>('CREATE_IMAGE');
+
+  // --- Imagine State ---
   const [imgPrompt, setImgPrompt] = useState('');
-  const [imgAspectRatio, setImgAspectRatio] = useState('1:1');
+  const [imgAspectRatio, setImgAspectRatio] = useState('16:9');
   const [isImgGenerating, setIsImgGenerating] = useState(false);
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
-  const [history, setHistory] = useState<GeneratedImage[]>([]);
-  const [vidPrompt, setVidPrompt] = useState('');
-  const [vidAspectRatio, setVidAspectRatio] = useState<'16:9' | '9:16'>('16:9');
-  const [isVidGenerating, setIsVidGenerating] = useState(false);
-  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
+  const [isApiKeySelected, setIsApiKeySelected] = useState(true);
+  
+  const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16'];
+
+  // --- Refiner State ---
+  const [refineSource, setRefineSource] = useState<string | null>(null);
+  const [refinePrompt, setRefinePrompt] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
 
   // --- Live Vision State ---
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [visionMode, setVisionMode] = useState<AnalysisMode>('SAFETY');
+  const [visionMode, setVisionMode] = useState<AnalysisMode>('QUALITY');
   const [observations, setObservations] = useState<any[]>([]);
   const [isVisionProcessing, setIsVisionProcessing] = useState(false);
-  const [visionError, setVisionError] = useState<string | null>(null);
-  const [agentQuery, setAgentQuery] = useState('');
-  const [agentResponse, setAgentResponse] = useState('');
-  const [isAgentThinking, setIsAgentThinking] = useState(false);
-  const [snapshot, setSnapshot] = useState<string | null>(null); // For pausing analysis on a frame
-  const [deepInspectResult, setDeepInspectResult] = useState<string | null>(null);
-  const [isInspecting, setIsInspecting] = useState(false);
   
-  // Refs
+  // --- Refs ---
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const refineInputRef = useRef<HTMLInputElement>(null);
 
   // --- Upload Analysis State ---
-  const [analyzeMedia, setAnalyzeMedia] = useState<string | null>(null); // Data URL
-  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
-  const [mimeType, setMimeType] = useState<string>('image/jpeg');
+  const [analyzeMedia, setAnalyzeMedia] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisItem[] | null>(null);
+  const [activeAnalysisType, setActiveAnalysisType] = useState<AnalysisMode | null>(null);
 
   useEffect(() => {
-    if (projects && projects.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projects[0].id);
-    }
+    const checkKey = async () => {
+        if (typeof window !== 'undefined' && (window as any).aistudio) {
+            const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+            setIsApiKeySelected(hasKey);
+        }
+    };
+    checkKey();
     return () => stopCamera();
-  }, [projects, selectedProjectId]);
+  }, []);
 
-  // --- Camera Logic ---
+  const handleSelectKey = async () => {
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+        await (window as any).aistudio.openSelectKey();
+        setIsApiKeySelected(true);
+    }
+  };
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' } 
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: 'environment' }
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
-        setVisionError(null);
         setIsCameraActive(true);
-        setSnapshot(null);
-        setDeepInspectResult(null);
         startAnalysisLoop();
       }
     } catch (e) {
       console.error("Camera error:", e);
-      setVisionError("Could not access camera. Please allow permissions.");
     }
   };
 
@@ -99,7 +108,6 @@ const ImagineView: React.FC = () => {
   };
 
   const captureFrame = (): string | null => {
-    if (snapshot) return snapshot.split(',')[1];
     if (!videoRef.current || !canvasRef.current) return null;
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return null;
@@ -109,58 +117,19 @@ const ImagineView: React.FC = () => {
     return canvasRef.current.toDataURL('image/jpeg', 0.8).split(',')[1];
   };
 
-  const takeSnapshot = () => {
-      if (!videoRef.current || !canvasRef.current) return;
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-      ctx.drawImage(videoRef.current, 0, 0);
-      setSnapshot(canvasRef.current.toDataURL('image/jpeg', 0.9));
-      // Pause live feed loop
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      setIsVisionProcessing(false);
-  };
-
   const analyzeFrame = async () => {
-    if (isVisionProcessing || snapshot) return; // Don't run auto-loop if snapshotted
+    if (isVisionProcessing) return;
     const base64Image = captureFrame();
     if (!base64Image) return;
 
     setIsVisionProcessing(true);
     try {
-      let prompt = "";
-      if (visionMode === 'SAFETY') {
-        prompt = `Analyze this construction site image for SAFETY hazards. Return JSON array: [{ "severity": "CRITICAL"|"WARNING"|"PASS", "title": "Short Title", "description": "Brief description" }]. Limit to 3 items.`;
-      } else if (visionMode === 'QUALITY') {
-        prompt = `Analyze this construction image for QUALITY defects. Return JSON array: [{ "severity": "CRITICAL"|"WARNING"|"INFO", "title": "Defect", "description": "Details" }]. Limit to 3 items.`;
-      } else {
-        prompt = `Analyze this construction image for PROGRESS. Return JSON array: [{ "severity": "INFO", "title": "Work Item", "description": "Status" }]. Limit to 3 items.`;
-      }
-
-      const result = await runRawPrompt(prompt, {
-        model: 'gemini-2.5-flash', // Use Flash for speed
-        temperature: 0.4,
-        responseMimeType: 'application/json'
-      }, base64Image);
-
-      let data;
-      try {
-          data = JSON.parse(result);
-      } catch (parseError) {
-          console.error("Failed to parse vision JSON:", result);
-          // Fallback to text if JSON parsing fails
-          data = [{ severity: "INFO", title: "Analysis", description: result.substring(0, 100) }];
-      }
-      
-      const newObs = (Array.isArray(data) ? data : [data]).map((obs: any) => ({
-        ...obs,
-        id: Date.now().toString() + Math.random().toString(),
-        timestamp: new Date().toLocaleTimeString()
-      }));
-      setObservations(newObs); // Replace observations for live feel
+      let prompt = `Analyze this construction site image for ${visionMode}. IDENTIFY 3 REAL OBSERVATIONS. Return JSON array: [{ "severity": "CRITICAL"|"WARNING"|"PASS", "title": "string", "description": "string" }]`;
+      const result = await runRawPrompt(prompt, { model: 'gemini-2.5-flash', responseMimeType: 'application/json' }, base64Image);
+      const data = parseAIJSON(result);
+      setObservations(Array.isArray(data) ? data : [data]);
     } catch (e) {
-      console.error("Vision analysis failed", e);
+      console.error(e);
     } finally {
       setIsVisionProcessing(false);
     }
@@ -168,443 +137,359 @@ const ImagineView: React.FC = () => {
 
   const startAnalysisLoop = () => {
     analyzeFrame();
-    intervalRef.current = window.setInterval(analyzeFrame, 4000); // 4s loop
+    intervalRef.current = window.setInterval(analyzeFrame, 8000);
   };
 
-  const handleSnapshotInspection = async () => {
-      if (!snapshot) return;
-      setIsInspecting(true);
-      setDeepInspectResult(null);
-      
-      try {
-          const base64 = snapshot.split(',')[1];
-          const prompt = `
-            Perform a deep, expert inspection of this construction site snapshot.
-            Focus on:
-            1. Safety Hazards (OSHA compliance)
-            2. Quality of workmanship
-            3. Visible progress against typical milestones
-            
-            Provide a detailed, structured report in markdown. Be specific about what you see.
-          `;
-          
-          const result = await runRawPrompt(prompt, {
-              model: 'gemini-3-pro-preview', // Pro for deep reasoning
-              temperature: 0.4
-          }, base64);
-          
-          setDeepInspectResult(result);
-      } catch (e) {
-          setDeepInspectResult("Failed to inspect image.");
-      } finally {
-          setIsInspecting(false);
-      }
-  };
-
-  const handleAgentQuery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!agentQuery.trim()) return;
-    const base64Image = captureFrame();
-    if (!base64Image) { setAgentResponse("Camera not active."); return; }
-
-    setIsAgentThinking(true);
-    setAgentResponse('');
-    try {
-        const prompt = `User asks about the live feed: "${agentQuery}". Answer concisely based on visual evidence.`;
-        const response = await runRawPrompt(prompt, { model: 'gemini-3-pro-preview', temperature: 0.5 }, base64Image);
-        setAgentResponse(response);
-    } catch (e) {
-        setAgentResponse("Processing error.");
-    } finally {
-        setIsAgentThinking(false);
-        setAgentQuery('');
-    }
-  };
-
-  // --- Image Generator ---
   const handleGenerateImage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!imgPrompt.trim() || isImgGenerating) return;
+    if (!imgPrompt.trim()) return;
     setIsImgGenerating(true);
+    setAiProcessing(true);
     try {
-      const imageUrl = await generateImage(imgPrompt, imgAspectRatio);
-      const newImage = { url: imageUrl, prompt: imgPrompt };
-      setCurrentImage(newImage);
-      setHistory(prev => [newImage, ...prev]);
-    } catch (error) {
-      console.error("Image Gen failed", error);
-      showNotification("Failed to generate image.");
+        const url = await generateImage(imgPrompt, imgAspectRatio);
+        setCurrentImage({ url, prompt: imgPrompt });
+    } catch (error: any) {
+        console.error(error);
+        if (error.message?.includes("Requested entity was not found.")) {
+            setIsApiKeySelected(false);
+        } else {
+            alert("Sovereign Forge failed to synthesize the request. Ensure proper API key clearance.");
+        }
     } finally {
-      setIsImgGenerating(false);
+        setIsImgGenerating(false);
+        setAiProcessing(false);
     }
   };
 
-  // --- Video Generator ---
-  const handleGenerateVideo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!vidPrompt.trim() || isVidGenerating) return;
-    setIsVidGenerating(true);
-    try {
-      const videoUrl = await generateVideo(vidPrompt, vidAspectRatio);
-      setCurrentVideoUrl(videoUrl);
-    } catch (error) {
-      console.error("Video Gen failed", error);
-      showNotification("Failed to generate video.");
-    } finally {
-      setIsVidGenerating(false);
-    }
-  };
-
-  // --- Upload Analysis ---
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const isVideo = file.type.startsWith('video/');
-      setMediaType(isVideo ? 'video' : 'image');
-      setMimeType(file.type);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAnalyzeMedia(reader.result as string);
-        setAnalysisResult(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const runUploadAnalysis = async (promptTemplate: string) => {
+  const runUploadAnalysis = async (mode: AnalysisMode) => {
     if (!analyzeMedia || isAnalyzing) return;
     setIsAnalyzing(true);
-    setAnalysisResult(null);
+    setActiveAnalysisType(mode);
+    setAiProcessing(true);
     try {
       const base64Data = analyzeMedia.split(',')[1];
-      const jsonPrompt = `${promptTemplate} Provide JSON array: [{"title": "", "description": "", "severity": "High"|"Medium"|"Low"|"Info", "mitigation": ""}].`;
-      const response = await runRawPrompt(jsonPrompt, { 
-            temperature: 0.4, responseMimeType: 'application/json', model: 'gemini-3-pro-preview'
-          }, base64Data, mimeType);
-      setAnalysisResult(response);
+      const jsonPrompt = `Act as a forensic construction auditor. Perform a technical deep dive into this site image for ${mode} criteria. Identify risks and deviations. Return JSON array: [{"title": "string", "description": "string", "severity": "High"|"Medium"|"Low", "mitigation": "string"}]`;
+      const response = await runRawPrompt(jsonPrompt, { model: 'gemini-3-pro-preview', responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 4096 } }, base64Data);
+      setAnalysisResult(parseAIJSON(response));
     } catch (error) {
-      console.error("Analysis failed", error);
-      setAnalysisResult("Failed to analyze media.");
+      console.error(error);
     } finally {
       setIsAnalyzing(false);
+      setAiProcessing(false);
     }
-  };
-
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
   };
 
   return (
     <div className="flex flex-col h-full bg-zinc-50 text-zinc-900 overflow-hidden relative">
-      {notification && (
-        <div className="absolute top-20 right-8 z-50 bg-zinc-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in">
-            <Check size={16} className="text-green-400" /> <span className="text-sm">{notification}</span>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="px-8 py-6 border-b border-zinc-200 flex items-center justify-between bg-white sticky top-0 z-20 shadow-sm">
+      <div className="px-10 py-8 border-b border-zinc-200 flex items-center justify-between bg-white sticky top-0 z-20 shadow-sm shrink-0">
         <div>
-            <h1 className="text-2xl font-bold text-zinc-900 flex items-center gap-3">
-                <Wand2 className="text-[#0f5c82]" /> Intelligence & Imagine Studio
+            <h1 className="text-4xl font-black text-zinc-900 flex items-center gap-5 uppercase tracking-tighter leading-none">
+                <Wand2 className="text-primary" size={36} /> Intelligence Studio
             </h1>
-            <p className="text-zinc-500 text-sm mt-1">Unified Generative AI & Vision Analysis Platform</p>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-3 flex items-center gap-2">
+                <Activity size={14} className="text-primary animate-pulse" /> Sovereign Generative Matrix Node
+            </p>
         </div>
         
-        <div className="flex items-center gap-4">
-            <div className="bg-zinc-100 p-1 rounded-lg border border-zinc-200 flex gap-1">
-                <button onClick={() => { setMode('CREATE_IMAGE'); stopCamera(); }} className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${mode === 'CREATE_IMAGE' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500'}`}>
-                    <ImageIcon size={16} /> Gen Image
+        <div className="bg-zinc-100 p-1.5 rounded-2xl border border-zinc-200 flex gap-1 shadow-inner">
+            {(['CREATE_IMAGE', 'INSPECT', 'REFINE', 'LIVE_FEED'] as Mode[]).map(m => (
+                <button 
+                  key={m} 
+                  onClick={() => { setMode(m); stopCamera(); setObservations([]); setAnalysisResult(null); }} 
+                  className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === m ? 'bg-midnight text-white shadow-xl' : 'text-zinc-500 hover:text-zinc-800'}`}
+                >
+                    {m.replace('_', ' ')}
                 </button>
-                <button onClick={() => { setMode('CREATE_VIDEO'); stopCamera(); }} className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${mode === 'CREATE_VIDEO' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500'}`}>
-                    <Video size={16} /> Gen Video
-                </button>
-                <button onClick={() => { setMode('LIVE_FEED'); }} className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${mode === 'LIVE_FEED' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500'}`}>
-                    <ScanLine size={16} /> Live Vision
-                </button>
-                <button onClick={() => { setMode('INSPECT'); stopCamera(); }} className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${mode === 'INSPECT' ? 'bg-white text-[#0f5c82] shadow-sm' : 'text-zinc-500'}`}>
-                    <Upload size={16} /> Upload & Analyze
-                </button>
-            </div>
+            ))}
         </div>
       </div>
 
-      {/* LIVE VISION MODE */}
-      {mode === 'LIVE_FEED' && (
-        <div className="flex h-full overflow-hidden">
-            {/* Left: Video Feed */}
-            <div className="flex-1 bg-black relative flex flex-col">
-                <div className="absolute top-4 left-4 z-30 flex gap-2 pointer-events-none">
-                    <div className="bg-black/60 backdrop-blur border border-zinc-700 rounded-lg p-1 flex pointer-events-auto">
-                        {(['SAFETY', 'QUALITY', 'PROGRESS'] as AnalysisMode[]).map(m => (
-                            <button key={m} onClick={() => { setVisionMode(m); setObservations([]); }} className={`px-3 py-1 rounded text-xs font-bold ${visionMode === m ? 'bg-[#0f5c82] text-white' : 'text-zinc-400 hover:text-white'}`}>{m}</button>
-                        ))}
-                    </div>
-                </div>
+      {!isApiKeySelected && mode === 'CREATE_IMAGE' && (
+          <div className="absolute inset-0 z-[100] bg-zinc-950/90 backdrop-blur-3xl flex items-center justify-center p-8 animate-in fade-in">
+              <div className="bg-white rounded-[3.5rem] p-16 shadow-2xl text-center max-w-xl border border-white/20">
+                  <div className="w-24 h-24 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mx-auto mb-10 shadow-inner">
+                      <Zap size={48} className="fill-current" />
+                  </div>
+                  <h2 className="text-4xl font-black text-zinc-900 uppercase tracking-tighter mb-4">Sovereign Key Required</h2>
+                  <p className="text-zinc-500 text-lg font-medium leading-relaxed mb-12 italic">
+                      "Image synthesis requires a paid project shard. Link your billing-enabled API key to access the Architect Pro engine."
+                  </p>
+                  <div className="flex flex-col gap-4">
+                    <button onClick={handleSelectKey} className="w-full py-6 bg-primary text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-blue-900/40 hover:bg-[#0c4a6e] transition-all flex items-center justify-center gap-4 active:scale-95 group">
+                        Link Shard Access <ArrowRight size={24} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                    <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-[10px] font-black text-zinc-400 uppercase tracking-widest hover:underline">Billing Documentation</a>
+                  </div>
+              </div>
+          </div>
+      )}
 
-                <div className="flex-1 relative flex items-center justify-center overflow-hidden">
-                    {!isCameraActive && !snapshot ? (
-                        <div className="text-center">
-                            <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-zinc-800"><Video size={40} className="text-zinc-600" /></div>
-                            <button onClick={startCamera} className="bg-[#0f5c82] hover:bg-[#0c4a6e] text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 mx-auto transition-all hover:scale-105"><Play size={18} /> Start Camera</button>
-                            <button onClick={() => setMode('INSPECT')} className="mt-6 text-zinc-500 hover:text-[#0f5c82] text-sm font-medium flex items-center gap-2 mx-auto transition-colors">
-                                Or upload an image for analysis <ArrowRight size={14} />
-                            </button>
-                            {visionError && <p className="text-red-400 text-sm mt-4">{visionError}</p>}
+      <div className="flex-1 overflow-hidden">
+        {mode === 'CREATE_IMAGE' && (
+            <div className="flex h-full animate-in fade-in duration-700">
+                <div className="w-[450px] bg-white border-r border-zinc-200 p-10 flex flex-col shadow-2xl z-10 overflow-y-auto custom-scrollbar">
+                    <div className="flex items-center gap-5 mb-10 shrink-0">
+                        <div className="p-4.5 bg-primary/10 text-primary rounded-3xl shadow-inner"><Sparkles size={36} /></div>
+                        <div>
+                            <h3 className="font-black text-zinc-900 text-2xl tracking-tight uppercase leading-none">Architect Forge</h3>
+                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mt-2 flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-500" /> Shard 3.0 Pro Active</p>
                         </div>
-                    ) : (
-                        <>
-                            {snapshot ? (
-                                <img src={snapshot} className="w-full h-full object-contain opacity-100" alt="Snapshot" />
-                            ) : (
-                                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-90" />
-                            )}
-                            <canvas ref={canvasRef} className="hidden" />
-                            
-                            {/* Overlay UI */}
-                            <div className="absolute inset-0 pointer-events-none">
-                                {!snapshot && (
-                                    <>
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] border-2 border-white/20 rounded-3xl">
-                                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#0f5c82]" />
-                                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#0f5c82]" />
-                                        </div>
-                                        {isVisionProcessing && <div className="absolute top-0 left-0 w-full h-1 bg-[#0f5c82]/50 shadow-[0_0_20px_#0f5c82] animate-[scan_2s_linear_infinite]" />}
-                                    </>
-                                )}
-                                
-                                <div className="absolute bottom-8 left-8 bg-black/60 backdrop-blur px-4 py-2 rounded-full flex items-center gap-3 border border-zinc-700 pointer-events-auto">
-                                    <div className={`w-2.5 h-2.5 rounded-full ${isVisionProcessing ? 'bg-yellow-500 animate-pulse' : (snapshot ? 'bg-orange-500' : 'bg-green-500')}`} />
-                                    <span className="text-xs font-mono tracking-wider text-white uppercase">{isVisionProcessing ? 'ANALYZING...' : (snapshot ? 'SNAPSHOT PAUSED' : 'MONITORING')}</span>
-                                    {!snapshot ? (
-                                        <button onClick={takeSnapshot} className="ml-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-white text-xs font-bold flex items-center gap-1 border border-white/10" title="Freeze Frame">
-                                            <Camera size={14} /> Freeze
-                                        </button>
-                                    ) : (
-                                        <button onClick={() => { setSnapshot(null); setDeepInspectResult(null); startAnalysisLoop(); }} className="ml-2 px-3 py-1 bg-green-600 hover:bg-green-500 rounded-lg text-white text-xs font-bold flex items-center gap-1" title="Resume Live">
-                                            <Play size={14} /> Resume
-                                        </button>
-                                    )}
-                                </div>
+                    </div>
+                    
+                    <div className="space-y-12 flex-1">
+                        <div className="space-y-4">
+                            <label className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-2">Design Intent Abstract</label>
+                            <textarea 
+                                value={imgPrompt}
+                                onChange={e => setImgPrompt(e.target.value)}
+                                className="w-full p-8 h-48 bg-zinc-50 border border-zinc-200 rounded-[2.5rem] text-sm font-medium focus:ring-8 focus:ring-primary/5 outline-none resize-none transition-all placeholder:text-zinc-300 italic shadow-inner"
+                                placeholder="Describe the structural genesis... (e.g. Ultra-realistic site overview, modern curtain wall assembly, morning fog, 8k)"
+                            />
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-2 flex items-center gap-2"><Layout size={16} className="text-primary" /> Geometric Aspect Shard</label>
+                            <div className="grid grid-cols-5 gap-2">
+                                {ratios.map(r => (
+                                    <button 
+                                        key={r}
+                                        onClick={() => setImgAspectRatio(r)}
+                                        className={`py-3.5 rounded-xl text-[10px] font-black border transition-all ${imgAspectRatio === r ? 'bg-midnight text-white border-midnight shadow-2xl' : 'bg-zinc-50 text-zinc-500 border-zinc-100 hover:border-zinc-300 hover:bg-zinc-100'}`}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
                             </div>
-                        </>
-                    )}
-                </div>
+                        </div>
+                    </div>
 
-                {/* Bottom Agent Bar */}
-                <div className="h-16 bg-zinc-900 border-t border-zinc-800 p-3 flex items-center gap-4 shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shrink-0"><Target size={16} className="text-white" /></div>
-                    <form onSubmit={handleAgentQuery} className="flex-1 relative">
-                        <input type="text" value={agentQuery} onChange={(e) => setAgentQuery(e.target.value)} placeholder={isCameraActive ? "Ask the agent about what it sees..." : "Start camera to interact..."} disabled={!isCameraActive} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-4 pr-10 py-2 text-xs focus:ring-1 focus:ring-[#0f5c82] focus:border-transparent outline-none text-white placeholder-zinc-500 transition-all" />
-                        <button type="submit" disabled={!agentQuery.trim() || isAgentThinking} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white disabled:opacity-30"><Send size={14} /></button>
-                    </form>
-                    {isCameraActive && <button onClick={stopCamera} className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"><StopCircle size={18} /></button>}
-                </div>
-            </div>
-
-            {/* Right: Observation Feed / Deep Inspection */}
-            <div className="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
-                <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                    <h3 className="font-bold text-zinc-100 flex items-center gap-2 text-sm"><Activity size={16} className="text-[#0f5c82]" /> Live Observations</h3>
-                    {snapshot && !deepInspectResult && (
+                    <div className="pt-10">
                         <button 
-                            onClick={handleSnapshotInspection}
-                            disabled={isInspecting}
-                            className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-500 flex items-center gap-1 transition-colors disabled:opacity-50 shadow-lg shadow-purple-900/50 animate-pulse"
+                            onClick={handleGenerateImage}
+                            disabled={isImgGenerating || !imgPrompt.trim()}
+                            className="w-full py-6 bg-zinc-950 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-primary transition-all flex items-center justify-center gap-4 disabled:opacity-50 active:scale-95 group"
                         >
-                            {isInspecting ? <Loader2 size={12} className="animate-spin" /> : <BrainCircuit size={14} />}
-                            Deep Inspect
+                            {isImgGenerating ? <Loader2 size={24} className="animate-spin text-primary" /> : <Zap size={24} className="text-yellow-400 fill-current group-hover:scale-110 transition-transform" />}
+                            Execute Genesis Protocol
                         </button>
-                    )}
+                    </div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                    {/* Deep Inspection Result */}
-                    {deepInspectResult && (
-                        <div className="bg-purple-900/20 border border-purple-500/30 p-4 rounded-lg mb-4 animate-in fade-in slide-in-from-right-4 shadow-lg">
-                            <div className="flex items-center gap-2 mb-3 text-xs font-bold text-purple-300 uppercase tracking-wide pb-2 border-b border-purple-500/30">
-                                <ScanEye size={14} /> Gemini Pro Analysis
-                            </div>
-                            <div className="text-xs text-zinc-300 leading-relaxed markdown-body whitespace-pre-wrap">
-                                {deepInspectResult}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Chat Response */}
-                    {agentResponse && (
-                        <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg mb-4 animate-in fade-in slide-in-from-right-4">
-                            <div className="flex items-center gap-2 mb-1 text-[10px] font-bold text-blue-300 uppercase tracking-wide"><MessageSquare size={10} /> Agent Insight</div>
-                            <p className="text-xs text-zinc-300 leading-relaxed">{agentResponse}</p>
-                        </div>
-                    )}
-
-                    {/* Live Observations */}
-                    {!snapshot && observations.map((obs) => (
-                        <div key={obs.id} className={`p-3 rounded-lg border relative animate-in slide-in-from-right-4 fade-in duration-500 ${obs.severity === 'CRITICAL' ? 'bg-red-950/30 border-red-500/50' : obs.severity === 'WARNING' ? 'bg-orange-950/30 border-orange-500/50' : 'bg-zinc-800/50 border-zinc-700'}`}>
-                            <div className="flex justify-between items-start mb-1">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${obs.severity === 'CRITICAL' ? 'bg-red-500 text-white' : obs.severity === 'WARNING' ? 'bg-orange-500 text-white' : 'bg-green-600 text-white'}`}>{obs.severity}</span>
-                                <span className="text-[9px] text-zinc-500 font-mono">{obs.timestamp}</span>
-                            </div>
-                            <h4 className="font-bold text-zinc-200 text-xs mb-1">{obs.title}</h4>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed">{obs.description}</p>
-                        </div>
-                    ))}
+                <div className="flex-1 bg-zinc-950 flex items-center justify-center relative p-12 overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+                    <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none rotate-12"><Target size={400} /></div>
                     
-                    {observations.length === 0 && !agentResponse && !deepInspectResult && (
-                        <div className="text-center text-zinc-600 mt-10 text-xs flex flex-col items-center">
-                            <ScanLine size={32} className="mb-2 opacity-20" />
-                            Waiting for visual data...
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-      )}
-
-      {/* IMAGE CREATION */}
-      {mode === 'CREATE_IMAGE' && (
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 max-w-6xl mx-auto w-full flex flex-col">
-            <div className="bg-white p-1.5 rounded-2xl border border-zinc-200 shadow-sm mb-6">
-                <form onSubmit={handleGenerateImage} className="flex flex-col md:flex-row items-center gap-2 p-2">
-                    <div className="relative flex-1 w-full">
-                        <Wand2 size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
-                        <input type="text" value={imgPrompt} onChange={(e) => setImgPrompt(e.target.value)} placeholder="Describe the construction image..." className="w-full bg-transparent border-none text-zinc-900 pl-12 pr-4 py-3 focus:ring-0" />
-                    </div>
-                    <div className="relative h-full">
-                        <Ratio size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                        <select value={imgAspectRatio} onChange={(e) => setImgAspectRatio(e.target.value)} className="w-full h-full bg-zinc-50 border-none rounded-lg text-sm text-zinc-700 py-3 pl-10 pr-10 focus:ring-0 cursor-pointer appearance-none font-medium">
-                            {['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    </div>
-                    <button type="submit" disabled={isImgGenerating} className="bg-[#0f5c82] text-white px-8 py-3 rounded-xl font-semibold hover:bg-[#0c4a6e] disabled:opacity-50 transition-colors flex items-center gap-2 h-full">
-                        {isImgGenerating ? <Loader2 className="animate-spin" /> : 'Generate'}
-                    </button>
-                </form>
-            </div>
-            <div className="flex-1 flex gap-8 min-h-[400px]">
-                <div className="flex-1 bg-white border border-zinc-200 rounded-2xl flex items-center justify-center relative overflow-hidden group">
                     {currentImage ? (
-                        <img src={currentImage.url} alt="Generated" className="w-full h-full object-contain" />
+                        <div className="relative group animate-in zoom-in-95 duration-1000 max-w-full max-h-full">
+                            <img src={currentImage.url} className="max-w-full max-h-full object-contain shadow-[0_80px_160px_-40px_rgba(0,0,0,0.8)] rounded-[3.5rem] border border-white/5 ring-1 ring-white/10" alt="Generated artifact" />
+                            <div className="absolute top-8 right-8 flex gap-4 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
+                                <button className="p-5 bg-midnight/80 backdrop-blur-xl rounded-[1.5rem] text-white hover:bg-primary transition-all border border-white/10 shadow-2xl"><Download size={28} /></button>
+                                <button className="p-5 bg-midnight/80 backdrop-blur-xl rounded-[1.5rem] text-white hover:bg-primary transition-all border border-white/10 shadow-2xl"><Share2 size={28} /></button>
+                            </div>
+                        </div>
                     ) : (
-                        <div className="text-zinc-400 flex flex-col items-center">
-                            {isImgGenerating ? <Loader2 size={48} className="animate-spin text-[#0f5c82]" /> : <ImageIcon size={48} />}
-                            <p className="mt-4">{isImgGenerating ? 'Generating with Gemini 3 Pro...' : 'Enter prompt to generate'}</p>
-                            <button 
-                                onClick={() => setMode('INSPECT')}
-                                className="mt-4 bg-zinc-100 text-zinc-600 px-4 py-2 rounded-lg hover:bg-zinc-200 transition-colors text-sm flex items-center gap-2 border border-zinc-200"
-                            >
-                                <Upload size={14} /> Or Analyze Existing Image
-                            </button>
+                        <div className="text-center space-y-8 relative z-10 animate-pulse">
+                            <div className="w-32 h-32 bg-white/5 rounded-[3.5rem] border border-white/5 flex items-center justify-center mx-auto shadow-2xl ring-1 ring-white/10">
+                                <ImageIcon size={64} className="text-zinc-800" />
+                            </div>
+                            <div className="space-y-3">
+                                <p className="text-zinc-700 font-black uppercase tracking-[0.5em] text-sm">Visual Hub Standby</p>
+                                <p className="text-zinc-800 text-xs font-bold uppercase tracking-[0.3em]">Initialize parameters to forger artifact</p>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {isImgGenerating && (
+                        <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-2xl flex flex-col items-center justify-center gap-10 animate-in fade-in duration-500">
+                            <div className="relative">
+                                <div className="w-48 h-48 border-[6px] border-white/5 border-t-primary rounded-full animate-spin" />
+                                <BrainCircuit className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-primary animate-pulse shadow-[0_0_50px_rgba(14,165,233,0.3)]" size={72} />
+                                <div className="absolute inset-0 bg-primary/20 blur-[80px] rounded-full animate-pulse-slow" />
+                            </div>
+                            <div className="text-center space-y-4">
+                                <h4 className="text-5xl font-black text-white uppercase tracking-tighter">Forging Logic Node</h4>
+                                <p className="text-zinc-500 text-sm font-black uppercase tracking-[0.5em] animate-pulse">Synthesizing high-fidelity construct...</p>
+                            </div>
                         </div>
                     )}
                 </div>
             </div>
-        </div>
-      )}
+        )}
 
-      {/* VIDEO CREATION (Veo) */}
-      {mode === 'CREATE_VIDEO' && (
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 max-w-4xl mx-auto w-full flex flex-col">
-             <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-8 rounded-2xl text-white shadow-xl mb-8">
-                 <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-white/10 rounded-lg"><Video size={24} /></div><h2 className="text-xl font-bold">Veo Video Studio</h2></div>
-                 <form onSubmit={handleGenerateVideo} className="space-y-4">
-                     <textarea value={vidPrompt} onChange={(e) => setVidPrompt(e.target.value)} placeholder="Describe the video scene..." className="w-full bg-white/10 border border-white/20 rounded-xl p-4 text-white placeholder-white/50 focus:ring-2 focus:ring-white/50 outline-none h-24 resize-none" />
-                     <div className="flex gap-4">
-                         <button type="button" onClick={() => setVidAspectRatio('16:9')} className={`flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg border ${vidAspectRatio === '16:9' ? 'border-white' : 'border-white/10'}`}><span>16:9</span></button>
-                         <button type="button" onClick={() => setVidAspectRatio('9:16')} className={`flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg border ${vidAspectRatio === '9:16' ? 'border-white' : 'border-white/10'}`}><span>9:16</span></button>
-                         <button type="submit" disabled={isVidGenerating} className="ml-auto px-8 py-2 bg-white text-purple-900 font-bold rounded-lg hover:bg-white/90 transition-colors disabled:opacity-50">{isVidGenerating ? 'Generating...' : 'Create Video'}</button>
-                     </div>
-                 </form>
-             </div>
-             <div className="flex-1 bg-black rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center min-h-[400px] relative">
-                 {isVidGenerating ? (
-                     <div className="text-center"><Loader2 size={48} className="animate-spin text-purple-500 mx-auto mb-4" /><p className="text-zinc-400">Veo is rendering your video...</p></div>
-                 ) : currentVideoUrl ? (
-                     <video src={currentVideoUrl} controls className="w-full h-full object-contain" />
-                 ) : (
-                     <div className="text-zinc-600 flex flex-col items-center"><Play size={64} className="opacity-20" /><p className="mt-4">Generated videos will appear here.</p></div>
-                 )}
-             </div>
-        </div>
-      )}
-
-      {/* INSPECT & ANALYZE */}
-      {mode === 'INSPECT' && (
-         <div className="flex-1 flex overflow-hidden">
-             <div className="flex-1 bg-zinc-100 p-6 flex flex-col justify-center items-center border-r border-zinc-200 relative">
-                 {analyzeMedia ? (
-                     mediaType === 'video' ? <video src={analyzeMedia} controls className="max-w-full max-h-full rounded-lg shadow-lg" /> : <img src={analyzeMedia} className="max-w-full max-h-full object-contain rounded-lg shadow-lg" />
-                 ) : (
-                     <div className="text-center text-zinc-400"><Upload size={48} className="mx-auto mb-4 opacity-50" /><p className="mb-4">Upload Media for Analysis</p><button onClick={() => fileInputRef.current?.click()} className="bg-[#0f5c82] text-white px-6 py-2.5 rounded-lg font-medium hover:bg-[#0c4a6e] transition-colors">Select File</button></div>
-                 )}
-                 {analyzeMedia && <button onClick={() => { setAnalyzeMedia(null); setAnalysisResult(null); }} className="absolute top-4 right-4 p-2 bg-white rounded-full shadow text-zinc-500 hover:text-red-500"><X size={20} /></button>}
-                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
-             </div>
-             <div className="w-96 bg-white p-6 flex flex-col shadow-xl z-10">
-                 <h3 className="font-bold text-zinc-900 mb-4 flex items-center gap-2"><ScanEye className="text-[#0f5c82]" /> Analysis Tools</h3>
-                 
-                 <div className="grid grid-cols-1 gap-3 mb-6">
-                     <button onClick={() => runUploadAnalysis('Analyze this construction site image for potential safety hazards and OSHA violations.')} disabled={!analyzeMedia} className="p-4 border rounded-xl hover:bg-zinc-50 text-left transition-all group disabled:opacity-50">
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-100 transition-colors"><ShieldAlert size={20} /></div>
-                            <span className="font-bold text-zinc-900">Safety Hazards</span>
+        {mode === 'INSPECT' && (
+           <div className="flex h-full animate-in fade-in duration-700">
+               <div className="flex-1 bg-zinc-100 p-12 flex flex-col justify-center items-center relative overflow-hidden group">
+                   <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#0ea5e9 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+                   {analyzeMedia ? (
+                        <div className="relative w-full h-full max-w-5xl max-h-[85%] rounded-[4rem] overflow-hidden shadow-[0_60px_120px_-30px_rgba(0,0,0,0.2)] border-8 border-white animate-in zoom-in-95 duration-500 bg-white">
+                            <img src={analyzeMedia} className="w-full h-full object-contain" />
+                            {isAnalyzing && (
+                                <div className="absolute inset-0 bg-midnight/40 backdrop-blur-sm flex flex-col items-center justify-center gap-6 animate-in fade-in">
+                                    <div className="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin shadow-2xl" />
+                                    <span className="text-white text-2xl font-black uppercase tracking-tighter text-shadow-xl">Forensic Extraction Active</span>
+                                </div>
+                            )}
+                            <button onClick={() => { setAnalyzeMedia(null); setAnalysisResult(null); setActiveAnalysisType(null); }} className="absolute top-10 right-10 p-5 bg-white rounded-full shadow-2xl text-zinc-400 hover:text-red-500 transition-all border border-zinc-100 active:scale-90"><X size={32} /></button>
                         </div>
-                        <p className="text-xs text-zinc-500 pl-[52px]">Identify risks, PPE violations, and unsafe conditions.</p>
-                     </button>
-
-                     <button onClick={() => runUploadAnalysis('Analyze this image for construction quality defects, workmanship issues, or damage.')} disabled={!analyzeMedia} className="p-4 border rounded-xl hover:bg-zinc-50 text-left transition-all group disabled:opacity-50">
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg group-hover:bg-orange-100 transition-colors"><Search size={20} /></div>
-                            <span className="font-bold text-zinc-900">Quality Defects</span>
+                   ) : (
+                       <div className="max-w-xl w-full text-center space-y-10 animate-in slide-in-from-bottom-6">
+                           <div 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-40 h-40 bg-white rounded-[3rem] flex items-center justify-center mx-auto shadow-2xl border-2 border-zinc-100 cursor-pointer hover:scale-110 hover:border-primary transition-all group relative ring-1 ring-zinc-50"
+                           >
+                               <div className="absolute inset-0 bg-primary/5 rounded-[3rem] opacity-0 group-hover:opacity-100 transition-opacity animate-pulse" />
+                               <Upload size={64} className="text-zinc-200 group-hover:text-primary transition-colors relative z-10" />
+                           </div>
+                           <div>
+                               <h2 className="text-3xl font-black text-zinc-900 uppercase tracking-tighter mb-3">Initialize Forensic Scan</h2>
+                               <p className="text-zinc-400 text-sm font-medium uppercase tracking-widest max-w-sm mx-auto">Upload site artifacts for deep reasoning analysis against safety and quality lattices.</p>
+                           </div>
+                           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => setAnalyzeMedia(reader.result as string);
+                                    reader.readAsDataURL(file);
+                                }
+                           }} />
+                       </div>
+                   )}
+               </div>
+               <div className="w-[500px] bg-white border-l border-zinc-200 p-10 flex flex-col shadow-2xl z-10 overflow-y-auto custom-scrollbar">
+                   <div className="space-y-4 mb-12">
+                       <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-[0.4em] px-2 mb-6">Instruction Matrix</h3>
+                       {(['QUALITY', 'SAFETY', 'PROGRESS'] as AnalysisMode[]).map(m => (
+                           <button 
+                                key={m}
+                                onClick={() => runUploadAnalysis(m)}
+                                disabled={!analyzeMedia || isAnalyzing}
+                                className={`w-full p-8 border-2 rounded-[2.5rem] text-left transition-all relative overflow-hidden group ${activeAnalysisType === m ? 'bg-primary/5 border-primary shadow-2xl scale-[1.03] ring-8 ring-primary/5' : 'bg-zinc-50 border-transparent hover:border-zinc-200 hover:bg-white'}`}
+                           >
+                               <div className="flex justify-between items-center relative z-10">
+                                   <div className="font-black text-zinc-900 uppercase tracking-widest text-lg">{m} SHARD</div>
+                                   <ArrowRight size={20} className={`transition-all ${activeAnalysisType === m ? 'text-primary translate-x-1' : 'text-zinc-300 opacity-0 group-hover:opacity-100'}`} />
+                               </div>
+                               <p className="text-xs text-zinc-400 mt-2 font-medium relative z-10 uppercase tracking-widest">Execute inference node for {m.toLowerCase()} verification.</p>
+                           </button>
+                       ))}
+                   </div>
+                   
+                   <div className="space-y-6 flex-1">
+                       <div className="flex justify-between items-center border-b border-zinc-100 pb-5 mb-8 px-2">
+                           <h4 className="text-[11px] font-black text-zinc-900 uppercase tracking-[0.4em] flex items-center gap-3"><ScanLine size={16} className="text-primary" /> Technical Ledger</h4>
+                           <span className="text-[9px] font-black bg-zinc-100 text-zinc-500 px-3 py-1 rounded-full">{analysisResult?.length || 0} DEEP NODES</span>
+                       </div>
+                       
+                       <div className="space-y-6">
+                           {analysisResult?.map((item, i) => (
+                               <div key={i} className="bg-zinc-50/50 border border-zinc-100 rounded-[2rem] p-8 shadow-sm animate-in slide-in-from-right-4 group hover:bg-white hover:border-primary transition-all relative overflow-hidden">
+                                   <div className={`absolute top-0 left-0 w-1.5 h-full ${item.severity === 'High' || item.severity === 'CRITICAL' ? 'bg-red-500' : item.severity === 'Medium' || item.severity === 'WARNING' ? 'bg-orange-500' : 'bg-primary'}`} />
+                                   <div className="flex justify-between items-start mb-4">
+                                       <h5 className="font-black text-zinc-900 text-base uppercase tracking-tight leading-tight group-hover:text-primary transition-colors">{item.title}</h5>
+                                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border-2 ${
+                                           item.severity === 'High' || item.severity === 'CRITICAL' ? 'bg-red-50 text-red-600 border-red-500/20' : 
+                                           item.severity === 'Medium' || item.severity === 'WARNING' ? 'bg-orange-50 text-orange-600 border-orange-500/20' : 
+                                           'bg-blue-50 text-blue-600 border-blue-500/20'
+                                       }`}>{item.severity}</span>
+                                   </div>
+                                   <p className="text-sm text-zinc-500 leading-relaxed font-medium italic mb-6">"{item.description}"</p>
+                                   {item.mitigation && (
+                                       <div className="p-5 bg-white border border-zinc-200 rounded-2xl flex items-start gap-4 shadow-inner">
+                                           <ShieldCheck size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                                           <div className="space-y-1">
+                                               <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Remediation Protocol</div>
+                                               <p className="text-xs font-bold text-zinc-700 leading-normal">{item.mitigation}</p>
+                                           </div>
+                                       </div>
+                                   )}
+                               </div>
+                           ))}
+                           {!analysisResult && (
+                               <div className="py-24 text-center border-2 border-dashed border-zinc-100 rounded-[2.5rem] bg-zinc-50/50">
+                                   <Activity size={48} className="mx-auto mb-4 text-zinc-200" />
+                                   <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Awaiting Analysis Payload</p>
+                               </div>
+                           )}
+                       </div>
+                   </div>
+               </div>
+           </div>
+        )}
+        
+        {mode === 'LIVE_FEED' && (
+            <div className="h-full bg-midnight relative flex items-center justify-center animate-in fade-in duration-500">
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
+                {!isCameraActive ? (
+                    <div className="text-center space-y-10 animate-in slide-in-from-bottom-8">
+                        <div className="w-32 h-32 bg-primary/10 rounded-full flex items-center justify-center mx-auto shadow-2xl border border-primary/20 ring-1 ring-primary/30 animate-pulse">
+                            <Radio size={56} className="text-primary" />
                         </div>
-                        <p className="text-xs text-zinc-500 pl-[52px]">Detect cracks, misalignment, and finish issues.</p>
-                     </button>
-
-                     <button onClick={() => runUploadAnalysis('Analyze the construction progress shown in this image. Estimate completion percentage of visible tasks.')} disabled={!analyzeMedia} className="p-4 border rounded-xl hover:bg-zinc-50 text-left transition-all group disabled:opacity-50">
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100 transition-colors"><Layers size={20} /></div>
-                            <span className="font-bold text-zinc-900">Progress Report</span>
+                        <div className="space-y-3">
+                            <h2 className="text-4xl font-black text-white uppercase tracking-tighter">Vision Agent Standby</h2>
+                            <p className="text-zinc-500 text-sm font-black uppercase tracking-[0.4em]">Real-time site telemetry sharding</p>
                         </div>
-                        <p className="text-xs text-zinc-500 pl-[52px]">Track milestones and completed work items.</p>
-                     </button>
-                 </div>
+                        <button onClick={startCamera} className="bg-primary text-white px-12 py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-[0_20px_50px_rgba(14,165,233,0.4)] hover:bg-[#0c4a6e] transition-all active:scale-95 flex items-center gap-4 mx-auto">
+                            <Play size={20} fill="currentColor" /> Initialize Link
+                        </button>
+                    </div>
+                ) : (
+                    <div className="relative w-full h-full group">
+                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70%] h-[70%] border-2 border-white/20 rounded-[4rem] flex flex-col items-center justify-center">
+                                <div className="absolute top-0 left-0 w-16 h-16 border-t-8 border-l-8 border-primary rounded-tl-[4rem] transition-all duration-700" />
+                                <div className="absolute top-0 right-0 w-16 h-16 border-t-8 border-r-8 border-primary rounded-tr-[4rem]" />
+                                <div className="absolute bottom-0 left-0 w-16 h-16 border-b-8 border-l-8 border-primary rounded-bl-[4rem]" />
+                                <div className="absolute bottom-0 right-0 w-16 h-16 border-b-8 border-r-8 border-primary rounded-br-[4rem]" />
+                                {isVisionProcessing && <div className="absolute top-0 left-0 right-0 h-1.5 bg-primary/50 shadow-[0_0_20px_#0ea5e9] animate-[scan_2s_linear_infinite]" />}
+                            </div>
+                        </div>
 
-                 <div className="flex-1 overflow-y-auto bg-zinc-50 rounded-xl p-4 border border-zinc-100">
-                     {isAnalyzing ? <div className="flex flex-col items-center justify-center h-full text-zinc-500"><Loader2 size={24} className="animate-spin mb-2" /><p className="text-xs">Analyzing with Gemini 3 Pro...</p></div> : (
-                         analysisResult ? (
-                             <div className="space-y-3">
-                                 {(() => {
-                                     try {
-                                         const parsed = JSON.parse(analysisResult);
-                                         const items = Array.isArray(parsed) ? parsed : [parsed];
-                                         return items.map((item: any, i: number) => (
-                                             <div key={i} className="bg-white border border-zinc-200 p-3 rounded-lg">
-                                                 <div className="flex justify-between mb-1">
-                                                     <span className="font-bold text-xs text-zinc-900">{item.title || 'Analysis Detail'}</span>
-                                                     <span className={`text-[10px] px-1.5 rounded ${item.severity === 'High' || item.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                         {item.severity || 'Info'}
-                                                     </span>
-                                                 </div>
-                                                 <p className="text-[10px] text-zinc-600 mb-2">{item.description || item.text || 'No description provided.'}</p>
-                                                 {item.mitigation && <div className="text-[10px] text-green-600 bg-green-50 p-1 rounded">Fix: {item.mitigation}</div>}
-                                             </div>
-                                         ));
-                                     } catch (e) {
-                                         return <div className="text-xs text-zinc-500 p-4 border border-dashed rounded-lg text-center bg-zinc-100/50">
-                                             <p className="font-bold mb-1">Detailed Analysis Report</p>
-                                             <p className="whitespace-pre-wrap text-left">{analysisResult}</p>
-                                         </div>;
-                                     }
-                                 })()}
-                             </div>
-                         ) : <p className="text-zinc-400 text-xs text-center mt-10">Select a tool to analyze the uploaded image.</p>
-                     )}
-                 </div>
-             </div>
-         </div>
-      )}
+                        <div className="absolute top-10 left-10 flex flex-col gap-6">
+                            <div className="bg-midnight/60 backdrop-blur-2xl px-8 py-4 rounded-full border border-white/10 text-xs font-black uppercase text-white flex items-center gap-4 shadow-2xl">
+                                <div className={`w-3 h-3 rounded-full ${isVisionProcessing ? 'bg-yellow-500 animate-pulse' : 'bg-emerald-500'}`} />
+                                <span className="tracking-[0.3em] font-mono">{isVisionProcessing ? 'Analyzing Node Payload' : 'Monitoring Sector 01-PRO'}</span>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                {observations.map((obs, i) => (
+                                    <div key={i} className="bg-midnight/80 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 w-80 animate-in slide-in-from-left-4 duration-500 shadow-2xl relative overflow-hidden group/obs">
+                                        <div className={`absolute top-0 left-0 w-1.5 h-full ${obs.severity === 'CRITICAL' ? 'bg-red-500' : obs.severity === 'WARNING' ? 'bg-orange-500' : 'bg-primary'}`} />
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-tighter ${obs.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' : 'bg-primary/20 text-primary'}`}>{obs.severity} DETECT</span>
+                                            <div className="w-1.5 h-1.5 rounded-full bg-white/20 animate-ping" />
+                                        </div>
+                                        <div className="text-white text-sm font-black truncate uppercase tracking-tight mb-1">{obs.title}</div>
+                                        <p className="text-[10px] text-zinc-400 leading-relaxed font-medium italic line-clamp-2">"{obs.description}"</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-8 bg-midnight/40 backdrop-blur-3xl px-12 py-6 rounded-[3.5rem] border border-white/10 shadow-2xl scale-110 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
+                            <div className="flex gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl">
+                                {(['QUALITY', 'SAFETY', 'PROGRESS'] as AnalysisMode[]).map(m => (
+                                    <button
+                                        key={m}
+                                        onClick={() => { setVisionMode(m); setObservations([]); }}
+                                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                            visionMode === m 
+                                            ? 'bg-primary text-white shadow-xl' 
+                                            : 'text-zinc-500 hover:text-white'
+                                        }`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="w-px h-10 bg-white/10" />
+                            <button onClick={stopCamera} className="p-5 bg-red-600 text-white rounded-[1.5rem] shadow-[0_20px_50px_rgba(239,68,68,0.4)] hover:bg-red-700 transition-all active:scale-90 flex items-center justify-center"><StopCircle size={32} /></button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+      </div>
     </div>
   );
 };

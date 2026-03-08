@@ -1,624 +1,411 @@
+import { 
+  Project, Task, TeamMember, ProjectDocument, ProjectDrawing, 
+  SitePhoto, Client, InventoryItem, RFI, PunchItem, DailyLog, 
+  Daywork, SafetyIncident, Equipment, Timesheet, Invoice, 
+  Company, AuditLog, SystemConfig, UserProfile, UserStatus, Invitation, ChangeOrder, UserRole
+} from '../types';
 
-import { Project, Task, TeamMember, ProjectDocument, Client, InventoryItem, RFI, PunchItem, DailyLog, Daywork, SafetyIncident, Equipment, Timesheet } from '../types';
-
-// Database Configuration
-const DB_NAME = 'BuildProDB';
-const DB_VERSION = 3; 
+const DB_NAME = 'CortexBuildProOS_v3';
+const DB_VERSION = 2;
 const STORES = {
   PROJECTS: 'projects',
   TASKS: 'tasks',
   TEAM: 'team',
-  DOCUMENTS: 'documents',
+  DOCUMENTS: 'documents', 
+  DRAWINGS: 'drawings',   
+  PHOTOS: 'photos',       
   CLIENTS: 'clients',
   INVENTORY: 'inventory',
   RFIS: 'rfis',
+  CHANGE_ORDERS: 'change_orders',
   PUNCH_ITEMS: 'punch_items',
   DAILY_LOGS: 'daily_logs',
   DAYWORKS: 'dayworks',
   SAFETY_INCIDENTS: 'safety_incidents',
   EQUIPMENT: 'equipment',
-  TIMESHEETS: 'timesheets'
+  TIMESHEETS: 'timesheets',
+  INVOICES: 'invoices',
+  COMPANIES: 'companies',
+  AUDIT_LOGS: 'audit_logs',
+  SYSTEM_CONFIG: 'system_config',
+  USERS: 'users',
+  INVITATIONS: 'invitations'
 };
 
-// Initial Data Seeds
-const SEED_DATA = {
-  [STORES.PROJECTS]: [
-    {
-      id: 'p1',
-      companyId: 'c1',
-      name: 'City Centre Plaza Development',
-      code: 'CCP-2025',
-      description: 'A mixed-use development featuring 40 stories of office space and a luxury retail podium.',
-      location: 'Downtown Metro',
-      type: 'Commercial',
-      status: 'Active',
-      health: 'Good',
-      progress: 74,
-      budget: 25000000,
-      spent: 18500000,
-      startDate: '2025-01-15',
-      endDate: '2026-12-31',
-      manager: 'John Anderson',
-      image: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      teamSize: 24,
-      tasks: { total: 145, completed: 98, overdue: 2 },
-      weatherLocation: { city: 'New York', temp: '72°', condition: 'Sunny' },
-      aiAnalysis: 'Project is progressing ahead of schedule. Structural steel completion is imminent.'
-    },
-    {
-      id: 'p2',
-      companyId: 'c1',
-      name: 'Residential Complex - Phase 2',
-      code: 'RCP-002',
-      description: 'Three tower residential complex with 400 units and shared amenities.',
-      location: 'Westside Heights',
-      type: 'Residential',
-      status: 'Active',
-      health: 'At Risk',
-      progress: 45,
-      budget: 18000000,
-      spent: 16500000,
-      startDate: '2025-02-01',
-      endDate: '2025-11-30',
-      manager: 'Sarah Mitchell',
-      image: 'https://images.unsplash.com/photo-1590069261209-f8e9b8642343?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      teamSize: 18,
-      tasks: { total: 200, completed: 80, overdue: 12 },
-      weatherLocation: { city: 'Chicago', temp: '65°', condition: 'Windy' }
-    },
-    {
-        id: 'p3',
-        companyId: 'c1',
-        name: 'Highway Bridge Repair',
-        code: 'HWY-95-REP',
-        description: 'Structural reinforcement and resurfacing of the I-95 overpass.',
-        location: 'Interstate 95',
-        type: 'Infrastructure',
-        status: 'Active',
-        health: 'Good',
-        progress: 12,
-        budget: 3200000,
-        spent: 400000,
-        startDate: '2025-10-01',
-        endDate: '2026-04-01',
-        manager: 'David Chen',
-        image: 'https://images.unsplash.com/photo-1545558014-8692077e9b5c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-        teamSize: 45,
-        tasks: { total: 50, completed: 5, overdue: 0 },
-        weatherLocation: { city: 'Austin', temp: '88°', condition: 'Clear' }
-    }
-  ],
-  [STORES.TASKS]: [
-    { id: 't1', title: 'Safety inspection - Site A', description: 'Conduct full perimeter safety check including scaffolding tags and fall protection systems before concrete pour.', projectId: 'p1', status: 'To Do', priority: 'High', assigneeName: 'Mike Thompson', assigneeType: 'user', dueDate: '2025-11-12', dependencies: [], latitude: 40.7128, longitude: -74.0060 },
-    { id: 't2', title: 'Concrete pouring - Level 2', description: 'Pour and finish slab for level 2 podium. Requires pump truck coordination.', projectId: 'p1', status: 'Blocked', priority: 'Critical', assigneeName: 'All Operatives', assigneeType: 'role', dueDate: '2025-11-20', dependencies: ['t1', 't3'], latitude: 40.7135, longitude: -74.0055 },
-    { id: 't3', title: 'Complete foundation excavation', description: 'Finalize earthworks for the North wing foundation footings.', projectId: 'p1', status: 'In Progress', priority: 'High', assigneeName: 'David Chen', assigneeType: 'user', dueDate: '2025-11-15', dependencies: [], latitude: 40.7120, longitude: -74.0065 },
-    { id: 't4', title: 'Install steel framework', description: 'Erect primary steel columns for sectors 1-4.', projectId: 'p1', status: 'Done', priority: 'High', assigneeName: 'David Chen', assigneeType: 'user', dueDate: '2025-11-08', dependencies: [] },
-    { id: 't5', title: 'Quality control inspection', description: 'Verify rebar spacing and cover depth prior to pour.', projectId: 'p3', status: 'To Do', priority: 'High', assigneeName: 'John Anderson', assigneeType: 'user', dueDate: '2025-11-14', dependencies: [] }
-  ],
-  [STORES.TEAM]: [
-    { id: 'tm1', companyId: 'c1', name: 'John Anderson', initials: 'JA', role: 'Principal Admin', status: 'On Site', projectId: 'p1', projectName: 'City Centre Plaza', phone: '+44 7700 900001', color: 'bg-[#0f5c82]', email: 'john@buildcorp.com', bio: '20+ years in construction.', location: 'London, UK', skills: ['Strategic Planning', 'Budget Management'], certifications: [], performanceRating: 98, completedProjects: 42 },
-    { id: 'tm3', companyId: 'c1', name: 'Mike Thompson', initials: 'MT', role: 'Project Manager', status: 'On Site', projectId: 'p1', projectName: 'City Centre Plaza', phone: '+44 7700 900003', color: 'bg-[#1f7d98]', email: 'mike@buildcorp.com', bio: 'Civil engineer.', location: 'London, UK', skills: ['Civil Engineering', 'Site Safety'], certifications: [], performanceRating: 88, completedProjects: 12 },
-    { id: 'tm4', companyId: 'c1', name: 'David Chen', initials: 'DC', role: 'Foreman', status: 'On Site', projectId: 'p3', projectName: 'Highway Bridge Repair', phone: '+44 7700 900004', color: 'bg-[#0f5c82]', email: 'david@buildcorp.com', bio: 'Steel expert.', location: 'Birmingham, UK', skills: ['Concrete', 'Formwork'], certifications: [], performanceRating: 92, completedProjects: 25 },
-    { id: 'tm8', companyId: 'c1', name: 'Alice Smith', initials: 'AS', role: 'Site Engineer', status: 'On Site', projectId: 'p1', projectName: 'City Centre Plaza', phone: '+44 7700 900009', color: 'bg-[#0f5c82]', email: 'alice@buildcorp.com', bio: 'Quality control specialist.', location: 'London, UK', skills: ['Quality Control'], certifications: [], performanceRating: 100, completedProjects: 0 }
-  ],
-  [STORES.DOCUMENTS]: [
-    { id: 'd1', name: 'City Centre - Structural Plans', type: 'CAD', projectId: 'p1', projectName: 'City Centre Plaza', size: '12.5 MB', date: '2025-10-15', status: 'Approved', linkedTaskIds: ['t4'] },
-    { id: 'd2', name: 'Building Permit - Phase 1', type: 'Document', projectId: 'p1', projectName: 'City Centre Plaza', size: '2.3 MB', date: '2025-09-20', status: 'Approved' },
-    { id: 'd3', name: 'Site Progress - North Wing', type: 'Image', projectId: 'p1', projectName: 'City Centre Plaza', size: '1.8 MB', date: '2025-11-01', status: 'Approved', url: 'https://images.unsplash.com/photo-1595849695259-34f50b239d28?auto=format&fit=crop&w=1000&q=80' }
-  ],
-  [STORES.CLIENTS]: [
-    { id: 'c1', companyId: 'c1', name: 'Metro Development Group', contactPerson: 'Alice Walker', role: 'Director of Operations', email: 'alice@metrodev.com', phone: '(555) 123-4567', status: 'Active', tier: 'Gold', activeProjects: 3, totalValue: '£45.2M' }
-  ],
-  [STORES.INVENTORY]: [
-    { id: 'INV-001', companyId: 'c1', name: 'Portland Cement Type I', category: 'Raw Materials', stock: 450, unit: 'Bags', threshold: 100, status: 'In Stock', location: 'Warehouse A', lastOrderDate: '2025-10-20', costPerUnit: 12.50 }
-  ],
-  [STORES.SAFETY_INCIDENTS]: [
-    { id: 'si-1', title: 'Minor cut on hand', project: 'City Centre Plaza', projectId: 'p1', severity: 'Low', status: 'Resolved', date: '2025-11-05', type: 'Injury' },
-    { id: 'si-2', title: 'Slip hazard identified', project: 'Residential Complex', projectId: 'p2', severity: 'Medium', status: 'Open', date: '2025-11-10', type: 'Hazard' },
-    { id: 'si-3', title: 'Near miss - Crane', project: 'City Centre Plaza', projectId: 'p1', severity: 'High', status: 'Investigating', date: '2025-11-09', type: 'Near Miss' },
-    { id: 'si-4', title: 'Scaffold Issue', project: 'Highway Bridge', projectId: 'p3', severity: 'Medium', status: 'Open', date: '2025-11-08', type: 'Compliance' },
-  ],
-  [STORES.EQUIPMENT]: [
-    { id: 'eq1', name: 'Excavator CAT 320', type: 'Heavy Machinery', status: 'In Use', projectId: 'p1', projectName: 'City Centre Plaza', lastService: '2025-10-15', nextService: '2025-12-15', companyId: 'c1' },
-    { id: 'eq2', name: 'Concrete Mixer', type: 'Utility Equipment', status: 'Available', projectId: '', projectName: '-', lastService: '2025-09-20', nextService: '2025-11-20', companyId: 'c1' },
-    { id: 'eq3', name: 'Tower Crane', type: 'Heavy Machinery', status: 'In Use', projectId: 'p1', projectName: 'City Centre Plaza', lastService: '2025-10-01', nextService: '2025-12-01', companyId: 'c1' },
-    { id: 'eq4', name: 'Forklift - 5 Ton', type: 'Heavy Machinery', status: 'Available', projectId: '', projectName: '-', lastService: '2025-10-10', nextService: '2025-12-10', companyId: 'c1' },
-    { id: 'eq5', name: 'Scissor Lift', type: 'Access', status: 'In Use', projectId: 'p2', projectName: 'Residential Complex', lastService: '2025-11-01', nextService: '2026-01-01', companyId: 'c1' },
-  ],
-  [STORES.TIMESHEETS]: [
-    { id: 'ts1', employeeName: 'James Wilson', projectId: 'p3', projectName: 'Highway Bridge', date: '2025-11-08', hours: 9, startTime: '08:00', endTime: '17:00', status: 'Pending', companyId: 'c1' },
-    { id: 'ts2', employeeName: 'David Chen', projectId: 'p2', projectName: 'Residential Complex', date: '2025-11-08', hours: 9, startTime: '07:30', endTime: '16:30', status: 'Approved', companyId: 'c1' },
-    { id: 'ts3', employeeName: 'Robert Garcia', projectId: 'p1', projectName: 'City Centre Plaza', date: '2025-11-08', hours: 10, startTime: '08:00', endTime: '18:00', status: 'Approved', companyId: 'c1' },
-    { id: 'ts4', employeeName: 'James Wilson', projectId: 'p3', projectName: 'Highway Bridge', date: '2025-11-09', hours: 8.75, startTime: '08:15', endTime: '17:00', status: 'Pending', companyId: 'c1' },
-    { id: 'ts5', employeeName: 'Emma Johnson', projectId: 'p2', projectName: 'Residential Complex', date: '2025-11-09', hours: 9.5, startTime: '08:00', endTime: '17:30', status: 'Pending', companyId: 'c1' },
-  ]
-};
+const SYNC_CHANNEL = new BroadcastChannel('cortex_realtime_sync');
 
 class DatabaseService {
-  private dbName: string;
-  private dbVersion: number;
   private db: IDBDatabase | null = null;
-  private apiBaseUrl: string;
-  private useBackend: boolean | null = null;
-
-  constructor() {
-    this.dbName = DB_NAME;
-    this.dbVersion = DB_VERSION;
-    // In development, the backend is likely on port 3001 or 3000
-    // In production, it's the same origin
-    this.apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? `${window.location.protocol}//${window.location.hostname}:3001/api`
-      : `${window.location.origin}/api`;
-  }
-
-  private async checkBackend(): Promise<boolean> {
-    if (this.useBackend !== null) return this.useBackend;
-    
-    try {
-      // Simple check to see if we can reach the projects endpoint
-      const response = await fetch(`${this.apiBaseUrl}/projects?companyId=c1`, { method: 'GET' });
-      this.useBackend = response.ok;
-      if (this.useBackend) {
-        console.log("Connected to PostgreSQL backend via Express API");
-      }
-    } catch (e) {
-      console.warn("Backend API not reachable, falling back to IndexedDB");
-      this.useBackend = false;
-    }
-    return this.useBackend;
-  }
+  private openingPromise: Promise<IDBDatabase> | null = null;
 
   private async open(): Promise<IDBDatabase> {
     if (this.db) return this.db;
+    if (this.openingPromise) return this.openingPromise;
 
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.dbVersion);
+    this.openingPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
-        // Create object stores if they don't exist
         Object.values(STORES).forEach(storeName => {
+          let store;
           if (!db.objectStoreNames.contains(storeName)) {
-            db.createObjectStore(storeName, { keyPath: 'id' });
+            store = db.createObjectStore(storeName, { keyPath: 'id' });
+          } else {
+            store = request.transaction!.objectStore(storeName);
+          }
+
+          // Indexing strategy for multi-tenant isolation
+          if (!['system_config', 'companies', 'users', 'invitations'].includes(storeName)) {
+            if (!store.indexNames.contains('by_company')) {
+              store.createIndex('by_company', 'companyId', { unique: false });
+            }
+          }
+          if (storeName === STORES.USERS) {
+            if (!store.indexNames.contains('by_email')) {
+              store.createIndex('by_email', 'email', { unique: true });
+            }
+          }
+          if (storeName === STORES.INVITATIONS) {
+            if (!store.indexNames.contains('by_token')) {
+              store.createIndex('by_token', 'token', { unique: true });
+            }
           }
         });
       };
 
-      request.onsuccess = (event) => {
+      request.onsuccess = async (event) => {
         this.db = (event.target as IDBOpenDBRequest).result;
-        this.seedData().then(() => resolve(this.db!));
+        try {
+          await this.seedInitialData();
+          resolve(this.db!);
+        } catch (error) {
+          console.error("[PROTOCOL] Genesis critical failure:", error);
+          reject(error);
+        }
       };
 
       request.onerror = (event) => {
-        reject(`Database error: ${(event.target as IDBOpenDBRequest).error}`);
+        reject((event.target as IDBOpenDBRequest).error);
       };
     });
+
+    return this.openingPromise;
   }
 
-  private async seedData() {
-    if (!this.db) return;
-    
-    return new Promise<void>((resolve) => {
-        const transaction = this.db!.transaction([STORES.PROJECTS], 'readonly');
-        const store = transaction.objectStore(STORES.PROJECTS);
-        const countRequest = store.count();
+  private async seedInitialData() {
+    const users = await this.getAllUsers();
+    if (users.length === 0) {
+      console.log("[PROTOCOL] Initializing Sovereign Registry...");
+      
+      const cid = 'c-genesis-01';
 
-        countRequest.onsuccess = () => {
-            if (countRequest.result === 0) {
-                console.log("Seeding initial database...");
-                try {
-                    const seedTransaction = this.db!.transaction(Object.values(STORES), 'readwrite');
-                    
-                    seedTransaction.oncomplete = () => {
-                        console.log("Database seeding complete.");
-                        resolve();
-                    };
-                    
-                    seedTransaction.onerror = (e) => {
-                        console.warn("Database seeding warning:", (e.target as IDBRequest).error);
-                        resolve();
-                    };
+      // 1. System Config Shard
+      await this.updateSystemConfig({
+        id: 'global-config',
+        maintenanceMode: false,
+        allowNewRegistrations: true,
+        globalSessionTTL: 240,
+        enforceMFAAcrossPlatform: true,
+        aiTokenLimitPerTenant: 10000000,
+        version: 'v4.5.3-STABLE',
+        globalFeatureFlags: { 'ai_reasoning_v3': true, 'multimodal_search': true, 'realtime_telemetry': true }
+      });
 
-                    Object.entries(SEED_DATA).forEach(([storeName, items]) => {
-                        const objectStore = seedTransaction.objectStore(storeName);
-                        items.forEach(item => objectStore.put(item));
-                    });
-                } catch (error) {
-                    console.error("Transaction creation failed", error);
-                    resolve();
-                }
-            } else {
-                resolve();
-            }
-        };
-        
-        countRequest.onerror = (e) => {
-            console.warn("Failed to check DB count, skipping seed", (e.target as IDBRequest).error);
-            resolve();
-        };
+      // 2. Default Company Shard
+      const defaultCompany: Company = {
+        id: cid,
+        name: 'Nexus Infrastructure Group',
+        slug: 'nexus-infra',
+        status: 'ACTIVE',
+        deploymentState: 'ACTIVE',
+        industry: 'Infrastructure',
+        region: 'EMEA',
+        timezone: 'UTC',
+        currency: 'GBP',
+        plan: 'Enterprise',
+        limits: { userSeats: 500, projects: 100, storageGB: 1000, apiCallsPerMonth: 1000000 },
+        features: { 
+          aiAssistant: true, 
+          imagineStudio: true, 
+          financials: true, 
+          advancedRBAC: true, 
+          liveVision: true, 
+          bimAnalytics: true 
+        },
+        securityProfile: { ssoEnabled: true, mfaRequired: true, sessionTTL: 240, passwordPolicy: 'Strong' },
+        ownerId: 'u-owner-01',
+        ownerEmail: 'owner@nexus.io',
+        ownerName: 'James Sterling',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastActivityAt: new Date().toISOString(),
+        usersCount: 5,
+        projectsCount: 2,
+        projectProgress: 35
+      };
+      await this.addCompany(defaultCompany);
+
+      // 3. User Identity Shards
+      const identities: UserProfile[] = [
+        {
+          id: 'u-admin-01',
+          name: 'Sovereign Administrator',
+          email: 'admin@cortex.pro'.toLowerCase(),
+          role: UserRole.SUPER_ADMIN,
+          status: 'ACTIVE',
+          phone: '+44 000 000 000',
+          companyId: 'PLATFORM',
+          projectIds: ['ALL'],
+          avatarInitials: 'SA',
+          features: defaultCompany.features,
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'u-owner-01',
+          name: 'James Sterling',
+          email: 'owner@nexus.io'.toLowerCase(),
+          role: UserRole.COMPANY_OWNER,
+          status: 'ACTIVE',
+          phone: '+44 111 222 333',
+          companyId: cid,
+          projectIds: ['p-01', 'p-02'],
+          avatarInitials: 'JS',
+          features: defaultCompany.features,
+          createdAt: new Date().toISOString()
+        }
+      ];
+      for (const u of identities) await this.saveUser(u);
+
+      // 4. Operational Shards (Projects, Tasks, RFIs, etc.)
+      const p1: Project = {
+        id: 'p-01',
+        companyId: cid,
+        name: 'Horizon Tower B',
+        code: 'HTB-25',
+        description: 'Primary structural assembly and facade integration for residential sector B.',
+        location: 'London Docklands',
+        type: 'Residential',
+        status: 'Active',
+        health: 'Good',
+        progress: 45,
+        budget: 45000000,
+        spent: 12000000,
+        startDate: '2025-01-01',
+        endDate: '2026-06-30',
+        manager: 'James Sterling',
+        image: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1000&q=80',
+        teamSize: 24,
+        tasks: { total: 42, completed: 18, overdue: 0 },
+        latitude: 51.5033,
+        longitude: -0.0055,
+        phases: [
+          { id: 'ph-1', name: 'Substructure', startDate: '2025-01-01', endDate: '2025-04-30', status: 'Complete', progress: 100 },
+          { id: 'ph-2', name: 'Superstructure', startDate: '2025-05-01', endDate: '2025-12-31', status: 'In Progress', progress: 35 }
+        ]
+      };
+      await this.addProject(p1);
+
+      const tasks: Task[] = [
+        {
+          id: 't-01',
+          companyId: cid,
+          projectId: 'p-01',
+          title: 'Concrete Pour Sector 4',
+          description: 'Technical pour for level 12 structural slab.',
+          status: 'In Progress',
+          priority: 'High',
+          assigneeName: 'James Sterling',
+          assigneeType: 'user',
+          dueDate: '2025-11-20',
+          latitude: 51.5034,
+          longitude: -0.0056
+        }
+      ];
+      for (const t of tasks) await this.addTask(t);
+
+      const rfi: RFI = {
+        id: 'rfi-01',
+        companyId: cid,
+        projectId: 'p-01',
+        number: 'RFI-101',
+        subject: 'Facade Anchor Tolerance',
+        question: 'Verification required for anchor point load tolerance on grid line C-12.',
+        status: 'Open',
+        assignedTo: 'James Sterling',
+        dueDate: '2025-11-25',
+        createdAt: new Date().toISOString()
+      };
+      await this.addRFI(rfi);
+
+      console.log("[PROTOCOL] Genesis complete. admin@cortex.pro / owner@nexus.io authorized.");
+    }
+  }
+
+  private async getStore(storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
+    const db = await this.open();
+    return db.transaction([storeName], mode).objectStore(storeName);
+  }
+
+  async getAll<T>(storeName: string, companyId?: string): Promise<T[]> {
+    const store = await this.getStore(storeName);
+    return new Promise((resolve, reject) => {
+      let request: IDBRequest;
+      if (companyId && companyId !== 'ALL' && store.indexNames.contains('by_company')) {
+        const index = store.index('by_company');
+        request = index.getAll(IDBKeyRange.only(companyId));
+      } else {
+        request = store.getAll();
+      }
+
+      request.onsuccess = () => {
+        let results = request.result as T[];
+        if (companyId && companyId !== 'ALL') {
+          results = results.filter((item: any) => {
+            if (storeName === STORES.COMPANIES) return item.id === companyId;
+            if (storeName === STORES.AUDIT_LOGS) return item.tenantId === companyId;
+            return item.companyId === companyId;
+          });
+        }
+        resolve(results);
+      };
+      request.onerror = () => reject(request.error);
     });
   }
 
-  // Generic CRUD Operations
-
-  async getAll<T>(storeName: string): Promise<T[]> {
-    try {
-      const db = await this.open();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readonly');
-        const store = transaction.objectStore(storeName);
-        const request = store.getAll();
-
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.error(`Failed to get all from ${storeName}`, e);
-      return [];
-    }
+  async getById<T>(storeName: string, id: string): Promise<T | null> {
+    const store = await this.getStore(storeName);
+    return new Promise((resolve, reject) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
   }
 
-  async add<T>(storeName: string, item: T): Promise<void> {
-    try {
-      const db = await this.open();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        const request = store.put(item); // Use put for upsert capability
-
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.error(`Failed to add to ${storeName}`, e);
-    }
+  async getByUserEmail(email: string): Promise<UserProfile | null> {
+    const store = await this.getStore(STORES.USERS);
+    const index = store.index('by_email');
+    return new Promise((resolve, reject) => {
+      const request = index.get(email.toLowerCase());
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
   }
 
-  async update<T>(storeName: string, item: T): Promise<void> {
-    return this.add(storeName, item); // .put handles update as well
+  async add<T extends { id: string; companyId?: string }>(storeName: string, item: T): Promise<void> {
+    const store = await this.getStore(storeName, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const request = store.put(item);
+      request.onsuccess = () => {
+        SYNC_CHANNEL.postMessage({ type: 'UPDATE', store: storeName, companyId: item.companyId, id: item.id });
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
-  async delete(storeName: string, id: string): Promise<void> {
-    try {
-      const db = await this.open();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        const request = store.delete(id);
-
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      console.error(`Failed to delete from ${storeName}`, e);
-    }
+  async update<T extends { id: string; companyId?: string }>(storeName: string, id: string, updates: Partial<T>): Promise<void> {
+    const store = await this.getStore(storeName, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        const data = getRequest.result;
+        if (!data) {
+          reject(new Error(`Node ${id} not found in shard ${storeName}`));
+          return;
+        }
+        const updatedItem = { ...data, ...updates };
+        const putRequest = store.put(updatedItem);
+        putRequest.onsuccess = () => {
+          SYNC_CHANNEL.postMessage({ type: 'UPDATE', store: storeName, companyId: updatedItem.companyId, id });
+          resolve();
+        };
+        putRequest.onerror = () => reject(putRequest.error);
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
   }
 
-  // Specific Accessors
-  async getProjects(): Promise<Project[]> { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects?companyId=c1`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch projects from backend", e);
-      }
-    }
-    return this.getAll<Project>(STORES.PROJECTS); 
+  async delete(storeName: string, id: string, companyId?: string): Promise<void> {
+    const store = await this.getStore(storeName, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => {
+        SYNC_CHANNEL.postMessage({ type: 'DELETE', store: storeName, companyId, id });
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
-  async addProject(p: Project) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: p.id,
-              name: p.name,
-              company_id: p.companyId,
-              code: p.code,
-              description: p.description,
-              location: p.location,
-              type: p.type,
-              manager: p.manager
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create project on backend", e);
-      }
-    }
-    return this.add(STORES.PROJECTS, p); 
+  subscribe(callback: (msg: any) => void) {
+    SYNC_CHANNEL.onmessage = (event) => callback(event.data);
   }
 
-  async updateProject(id: string, p: Partial<Project>) {
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(p)
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to update project on backend", e);
-      }
-    }
-    const projects = await this.getProjects();
-    const existing = projects.find(x => x.id === id);
-    if(existing) await this.update(STORES.PROJECTS, { ...existing, ...p });
+  async saveUser(user: UserProfile) { return this.add(STORES.USERS, user); }
+  async getUser(id: string) { return this.getById<UserProfile>(STORES.USERS, id); }
+  async getAllUsers() { return this.getAll<UserProfile>(STORES.USERS); }
+  async updateUserStatus(id: string, status: UserStatus) { return this.update<UserProfile>(STORES.USERS, id, { status }); }
+  async addInvitation(inv: Invitation) { return this.add(STORES.INVITATIONS, inv); }
+  async getInvitations() { return this.getAll<Invitation>(STORES.INVITATIONS); }
+  async getCompanies(): Promise<Company[]> { return this.getAll<Company>(STORES.COMPANIES); }
+  async addCompany(c: Company) { return this.add(STORES.COMPANIES, c); }
+  async updateCompany(id: string, updates: Partial<Company>) { return this.update(STORES.COMPANIES, id, updates); }
+  async getSystemConfig(): Promise<SystemConfig | null> {
+    const configs = await this.getAll<SystemConfig>(STORES.SYSTEM_CONFIG);
+    return configs[0] || null;
   }
-
+  async updateSystemConfig(config: SystemConfig) { return this.add(STORES.SYSTEM_CONFIG, config); }
+  async getAuditLogs(): Promise<AuditLog[]> { return this.getAll<AuditLog>(STORES.AUDIT_LOGS); }
+  async addAuditLog(log: AuditLog) { return this.add(STORES.AUDIT_LOGS, log); }
+  async getProjects(cid?: string): Promise<Project[]> { return this.getAll<Project>(STORES.PROJECTS, cid); }
+  async addProject(p: Project) { return this.add(STORES.PROJECTS, p); }
+  async updateProject(id: string, updates: Partial<Project>) { return this.update(STORES.PROJECTS, id, updates); }
   async deleteProject(id: string) { return this.delete(STORES.PROJECTS, id); }
-
-  async getTasks(projectId?: string): Promise<Task[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/tasks`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch tasks from backend", e);
-      }
-    }
-    return this.getAll<Task>(STORES.TASKS); 
-  }
-  async addTask(t: Task) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${t.projectId}/tasks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: t.id,
-              title: t.title,
-              description: t.description,
-              status: t.status,
-              priority: t.priority,
-              assignee_name: t.assigneeName,
-              due_date: t.dueDate
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create task on backend", e);
-      }
-    }
-    return this.add(STORES.TASKS, t); 
-  }
-  async updateTask(id: string, t: Partial<Task>) {
-      const tasks = await this.getTasks();
-      const existing = tasks.find(x => x.id === id);
-      if(existing) await this.update(STORES.TASKS, { ...existing, ...t });
-  }
-
-  async getTeam(): Promise<TeamMember[]> { return this.getAll<TeamMember>(STORES.TEAM); }
+  async getTasks(cid?: string): Promise<Task[]> { return this.getAll<Task>(STORES.TASKS, cid); }
+  async addTask(t: Task) { return this.add(STORES.TASKS, t); }
+  async updateTask(id: string, updates: Partial<Task>) { return this.update(STORES.TASKS, id, updates); }
+  async getTeam(cid?: string): Promise<TeamMember[]> { return this.getAll<TeamMember>(STORES.TEAM, cid); }
   async addTeamMember(m: TeamMember) { return this.add(STORES.TEAM, m); }
-
-  async getDocuments(projectId?: string): Promise<ProjectDocument[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/documents`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch documents from backend", e);
-      }
-    }
-    return this.getAll<ProjectDocument>(STORES.DOCUMENTS); 
-  }
+  async getDocuments(cid?: string): Promise<ProjectDocument[]> { return this.getAll<ProjectDocument>(STORES.DOCUMENTS, cid); }
   async addDocument(d: ProjectDocument) { return this.add(STORES.DOCUMENTS, d); }
-  async updateDocument(id: string, d: Partial<ProjectDocument>) {
-      const docs = await this.getDocuments();
-      const existing = docs.find(x => x.id === id);
-      if (existing) await this.update(STORES.DOCUMENTS, { ...existing, ...d });
-  }
-
-  async getClients(): Promise<Client[]> { return this.getAll<Client>(STORES.CLIENTS); }
+  async updateDocument(id: string, updates: Partial<ProjectDocument>) { return this.update(STORES.DOCUMENTS, id, updates); }
+  async getDrawings(cid?: string): Promise<ProjectDrawing[]> { return this.getAll<ProjectDrawing>(STORES.DRAWINGS, cid); }
+  async addDrawing(d: ProjectDrawing) { return this.add(STORES.DRAWINGS, d); }
+  async updateDrawing(id: string, updates: Partial<ProjectDrawing>) { return this.update(STORES.DRAWINGS, id, updates); }
+  async getPhotos(cid?: string): Promise<SitePhoto[]> { return this.getAll<SitePhoto>(STORES.PHOTOS, cid); }
+  async addPhoto(p: SitePhoto) { return this.add(STORES.PHOTOS, p); }
+  async getClients(cid?: string): Promise<Client[]> { return this.getAll<Client>(STORES.CLIENTS, cid); }
   async addClient(c: Client) { return this.add(STORES.CLIENTS, c); }
-
-  async getInventory(companyId: string = 'c1'): Promise<InventoryItem[]> { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/inventory?companyId=${companyId}`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch inventory from backend", e);
-      }
-    }
-    return this.getAll<InventoryItem>(STORES.INVENTORY); 
-  }
+  async getRFIs(cid?: string): Promise<RFI[]> { return this.getAll<RFI>(STORES.RFIS, cid); }
+  async addRFI(r: RFI) { return this.add(STORES.RFIS, r); }
+  async updateRFI(id: string, updates: Partial<RFI>) { return this.update(STORES.RFIS, id, updates); }
+  async getChangeOrders(cid?: string): Promise<ChangeOrder[]> { return this.getAll<ChangeOrder>(STORES.CHANGE_ORDERS, cid); }
+  async addChangeOrder(co: ChangeOrder) { return this.add(STORES.CHANGE_ORDERS, co); }
+  async updateChangeOrder(id: string, updates: Partial<ChangeOrder>) { return this.update(STORES.CHANGE_ORDERS, id, updates); }
+  async getPunchItems(cid?: string): Promise<PunchItem[]> { return this.getAll<PunchItem>(STORES.PUNCH_ITEMS, cid); }
+  async addPunchItem(pi: PunchItem) { return this.add(STORES.PUNCH_ITEMS, pi); }
+  async updatePunchItem(id: string, updates: Partial<PunchItem>) { return this.update(STORES.PUNCH_ITEMS, id, updates); }
+  async getDailyLogs(cid?: string): Promise<DailyLog[]> { return this.getAll<DailyLog>(STORES.DAILY_LOGS, cid); }
+  async addDailyLog(dl: DailyLog) { return this.add(STORES.DAILY_LOGS, dl); }
+  async getDayworks(cid?: string): Promise<Daywork[]> { return this.getAll<Daywork>(STORES.DAYWORKS, cid); }
+  async addDaywork(dw: Daywork) { return this.add(STORES.DAYWORKS, dw); }
+  async getSafetyIncidents(cid?: string): Promise<SafetyIncident[]> { return this.getAll<SafetyIncident>(STORES.SAFETY_INCIDENTS, cid); }
+  async addSafetyIncident(s: SafetyIncident) { return this.add(STORES.SAFETY_INCIDENTS, s); }
+  async updateSafetyIncident(id: string, updates: Partial<SafetyIncident>) { return this.update(STORES.SAFETY_INCIDENTS, id, updates); }
+  async getEquipment(cid?: string): Promise<Equipment[]> { return this.getAll<Equipment>(STORES.EQUIPMENT, cid); }
+  async addEquipment(e: Equipment) { return this.add(STORES.EQUIPMENT, e); }
+  async updateEquipment(id: string, updates: Partial<Equipment>) { return this.update(STORES.EQUIPMENT, id, updates); }
+  async getInventory(cid?: string): Promise<InventoryItem[]> { return this.getAll<InventoryItem>(STORES.INVENTORY, cid); }
   async addInventoryItem(i: InventoryItem) { return this.add(STORES.INVENTORY, i); }
-  async updateInventoryItem(id: string, i: Partial<InventoryItem>) {
-      const items = await this.getInventory();
-      const existing = items.find(x => x.id === id);
-      if(existing) await this.update(STORES.INVENTORY, { ...existing, ...i });
-  }
-
-  async getRFIs(projectId?: string): Promise<RFI[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/rfis`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch RFIs from backend", e);
-      }
-    }
-    return this.getAll<RFI>(STORES.RFIS); 
-  }
-  async addRFI(item: RFI) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/rfis`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: item.id,
-              subject: item.subject,
-              number: item.number,
-              description: item.description,
-              assigned_to: item.assignedTo,
-              due_date: item.dueDate
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create RFI on backend", e);
-      }
-    }
-    return this.add(STORES.RFIS, item); 
-  }
-
-  async getPunchItems(projectId?: string): Promise<PunchItem[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/punch-items`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch punch items from backend", e);
-      }
-    }
-    return this.getAll<PunchItem>(STORES.PUNCH_ITEMS); 
-  }
-  async addPunchItem(item: PunchItem) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/punch-items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: item.id,
-              title: item.title,
-              location: item.location,
-              description: item.description,
-              priority: item.priority,
-              assigned_to: item.assignedTo,
-              due_date: item.dueDate
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create punch item on backend", e);
-      }
-    }
-    return this.add(STORES.PUNCH_ITEMS, item); 
-  }
-
-  async getDailyLogs(projectId?: string): Promise<DailyLog[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/daily-logs`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch daily logs from backend", e);
-      }
-    }
-    return this.getAll<DailyLog>(STORES.DAILY_LOGS); 
-  }
-  async addDailyLog(item: DailyLog) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/daily-logs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: item.id,
-              date: item.date,
-              weather: item.weather,
-              notes: item.notes,
-              activities: item.activities,
-              workforce: item.workforce,
-              created_by: item.createdBy,
-              status: item.status
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create daily log on backend", e);
-      }
-    }
-    return this.add(STORES.DAILY_LOGS, item); 
-  }
-
-  async getDayworks(): Promise<Daywork[]> { return this.getAll<Daywork>(STORES.DAYWORKS); }
-  async addDaywork(item: Daywork) { return this.add(STORES.DAYWORKS, item); }
-
-  // New Methods for Safety, Equipment, Timesheets
-  async getSafetyIncidents(projectId?: string): Promise<SafetyIncident[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/safety`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch safety incidents from backend", e);
-      }
-    }
-    return this.getAll<SafetyIncident>(STORES.SAFETY_INCIDENTS); 
-  }
-  async addSafetyIncident(item: SafetyIncident) { 
-    if (await this.checkBackend()) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${item.projectId}/safety`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              id: item.id,
-              type: item.type,
-              title: item.title,
-              severity: item.severity,
-              date: item.date,
-              status: item.status,
-              description: item.description
-          })
-        });
-        if (response.ok) return;
-      } catch (e) {
-        console.error("Failed to create safety incident on backend", e);
-      }
-    }
-    return this.add(STORES.SAFETY_INCIDENTS, item); 
-  }
-  async updateSafetyIncident(id: string, u: Partial<SafetyIncident>) {
-      const items = await this.getSafetyIncidents();
-      const existing = items.find(x => x.id === id);
-      if(existing) await this.update(STORES.SAFETY_INCIDENTS, { ...existing, ...u });
-  }
-
-  async getEquipment(projectId?: string): Promise<Equipment[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/equipment`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch equipment from backend", e);
-      }
-    }
-    return this.getAll<Equipment>(STORES.EQUIPMENT); 
-  }
-  async addEquipment(item: Equipment) { return this.add(STORES.EQUIPMENT, item); }
-  async updateEquipment(id: string, u: Partial<Equipment>) {
-      const items = await this.getEquipment();
-      const existing = items.find(x => x.id === id);
-      if(existing) await this.update(STORES.EQUIPMENT, { ...existing, ...u });
-  }
-
-  async getTimesheets(projectId?: string): Promise<Timesheet[]> { 
-    if (await this.checkBackend() && projectId) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/timesheets`);
-        if (response.ok) return await response.json();
-      } catch (e) {
-        console.error("Failed to fetch timesheets from backend", e);
-      }
-    }
-    return this.getAll<Timesheet>(STORES.TIMESHEETS); 
-  }
-  async addTimesheet(item: Timesheet) { return this.add(STORES.TIMESHEETS, item); }
-  async updateTimesheet(id: string, u: Partial<Timesheet>) {
-      const items = await this.getTimesheets();
-      const existing = items.find(x => x.id === id);
-      if(existing) await this.update(STORES.TIMESHEETS, { ...existing, ...u });
-  }
+  async updateInventoryItem(id: string, updates: Partial<InventoryItem>) { return this.update(STORES.INVENTORY, id, updates); }
+  async getTimesheets(cid?: string): Promise<Timesheet[]> { return this.getAll<Timesheet>(STORES.TIMESHEETS, cid); }
+  async addTimesheet(t: Timesheet) { return this.add(STORES.TIMESHEETS, t); }
+  async updateTimesheet(id: string, updates: Partial<Timesheet>) { return this.update(STORES.TIMESHEETS, id, updates); }
+  async getInvoices(cid?: string): Promise<Invoice[]> { return this.getAll<Invoice>(STORES.INVOICES, cid); }
+  async addInvoice(i: Invoice) { return this.add(STORES.INVOICES, i); }
+  async updateInvoice(id: string, updates: Partial<Invoice>) { return this.update(STORES.INVOICES, id, updates); }
+  async deleteInvoice(id: string) { return this.delete(STORES.INVOICES, id); }
 }
 
 export const db = new DatabaseService();

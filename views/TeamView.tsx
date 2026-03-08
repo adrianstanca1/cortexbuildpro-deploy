@@ -1,14 +1,16 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { 
   Plus, Users, LayoutGrid, List as ListIcon, Search, Filter, 
   Phone, Mail, MapPin, Award, Star, Briefcase, X, 
-  FileText, Loader2, Tag, Sparkles, Copy, UserCheck, Upload, Trash2, Eye, Globe
+  FileText, Loader2, Tag, Sparkles, Copy, UserCheck, Upload, Trash2, Eye, Globe,
+  ShieldCheck, ShieldPlus, UserPlus, ArrowRight, ShieldAlert, Zap, AlertTriangle,
+  Activity, ChevronRight, ChevronDown, Maximize2, CheckCircle, BrainCircuit,
+  Lock, Shield, Terminal, Info
 } from 'lucide-react';
 import { useProjects } from '../contexts/ProjectContext';
 import { useAuth } from '../contexts/AuthContext';
-import { TeamMember, Certification, UserRole } from '../types';
-import { runRawPrompt } from '../services/geminiService';
+import { TeamMember, Certification, UserRole, Permission, ROLE_PERMISSIONS } from '../types';
+import { runRawPrompt, parseAIJSON } from '../services/geminiService';
 
 interface TeamViewProps {
   projectId?: string;
@@ -31,10 +33,9 @@ const StatusBadge = ({ status }: { status: string }) => {
 const UserCard: React.FC<{ member: TeamMember; onClick: () => void; showCompany: boolean }> = ({ member, onClick, showCompany }) => {
     if (!member) return null;
     
-    // Safe access defaults
     const status = member.status || 'Unknown';
     const name = member.name || 'Unknown Member';
-    const role = member.role || 'Unassigned';
+    const roleLabel = member.role.replace('_', ' ');
     const color = member.color || 'bg-zinc-400';
     const initials = member.initials || '??';
     const projectName = member.projectName || 'Unassigned';
@@ -42,74 +43,85 @@ const UserCard: React.FC<{ member: TeamMember; onClick: () => void; showCompany:
     const certCount = member.certifications?.length || 0;
 
     return (
-    <div onClick={onClick} className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden hover:border-[#0f5c82] flex flex-col h-full">
-        <div className={`absolute top-0 left-0 w-1 h-full ${status === 'On Site' ? 'bg-green-500' : 'bg-zinc-300'}`} />
+    <div onClick={onClick} className="bg-white border border-zinc-200 rounded-[2.5rem] p-8 shadow-sm hover:shadow-2xl transition-all cursor-pointer group relative overflow-hidden hover:border-primary flex flex-col h-full ring-1 ring-transparent hover:ring-primary/10">
+        <div className={`absolute top-0 left-0 w-1.5 h-full ${status === 'On Site' ? 'bg-emerald-500' : 'bg-zinc-200'}`} />
         
-        <div className="flex justify-between items-start mb-4 pl-2">
-            <div className={`w-12 h-12 rounded-full ${color} text-white flex items-center justify-center text-sm font-bold shadow-sm ring-2 ring-white`}>
+        <div className="flex justify-between items-start mb-6">
+            <div className={`w-14 h-14 rounded-2xl ${color} text-white flex items-center justify-center text-sm font-black shadow-lg ring-4 ring-white`}>
                 {initials}
             </div>
-            <StatusBadge status={status} />
+            <div className="flex flex-col items-end gap-2">
+                <StatusBadge status={status} />
+                {member.role === UserRole.COMPANY_OWNER && <span className="bg-amber-50 text-amber-700 text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-amber-100 shadow-sm">Sovereign Owner</span>}
+                {member.role === UserRole.COMPANY_ADMIN && <span className="bg-indigo-50 text-indigo-700 text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-indigo-100 shadow-sm">Tenant Admin</span>}
+            </div>
         </div>
         
-        <div className="pl-2 flex-1">
-            <h3 className="text-lg font-bold text-zinc-900 mb-1 group-hover:text-[#0f5c82] transition-colors truncate">{name}</h3>
-            <p className="text-sm text-zinc-500 mb-4">{role}</p>
+        <div className="flex-1">
+            <h3 className="text-xl font-black text-zinc-900 mb-1 group-hover:text-primary transition-colors truncate uppercase tracking-tight">{name}</h3>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-6">{roleLabel}</p>
             
-            <div className="space-y-2 text-sm text-zinc-600">
+            <div className="space-y-3 text-sm text-zinc-600">
                 {showCompany && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <Globe size={14} className="text-purple-500" />
-                        <span className="truncate font-medium text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-xs uppercase">{member.companyId}</span>
+                        <span className="truncate font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-lg text-[10px] uppercase">{member.companyId}</span>
                     </div>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <Briefcase size={14} className="text-zinc-400" />
-                    <span className="truncate">{projectName}</span>
+                    <span className="truncate text-xs font-medium">{projectName}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <Phone size={14} className="text-zinc-400" />
-                    <span>{phone}</span>
+                    <span className="text-xs font-mono">{phone}</span>
                 </div>
             </div>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-zinc-50 pl-2 flex gap-2">
-            {certCount > 0 ? (
-                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded flex items-center gap-1 font-medium">
-                    <Award size={12} /> {certCount} Doc{certCount !== 1 ? 's' : ''}
-                </span>
-            ) : (
-                <span className="text-xs bg-zinc-50 text-zinc-400 px-2 py-1 rounded flex items-center gap-1 font-medium">
-                    No Docs
-                </span>
-            )}
-            {member.performanceRating !== undefined && (
-                <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded flex items-center gap-1 font-medium">
-                    <Star size={12} /> {member.performanceRating}%
-                </span>
-            )}
+        <div className="mt-8 pt-6 border-t border-zinc-50 flex justify-between items-center">
+            <div className="flex gap-2">
+                {certCount > 0 ? (
+                    <span className="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded-lg flex items-center gap-1 font-black uppercase border border-blue-100">
+                        <Award size={10} /> {certCount} Docs
+                    </span>
+                ) : (
+                    <span className="text-[9px] bg-zinc-50 text-zinc-400 px-2 py-1 rounded-lg flex items-center gap-1 font-black uppercase border border-zinc-100">
+                        No Docs
+                    </span>
+                )}
+                {member.performanceRating !== undefined && (
+                    <span className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 font-black uppercase border border-emerald-100">
+                        <Activity size={10} /> {member.performanceRating}%
+                    </span>
+                )}
+            </div>
+            <ChevronRight size={16} className="text-zinc-300 group-hover:text-primary group-hover:translate-x-1 transition-all" />
         </div>
     </div>
     );
 };
 
 const TeamView: React.FC<TeamViewProps> = ({ projectId }) => {
-  const { teamMembers, isLoading, addTeamMember } = useProjects();
-  const { user } = useAuth();
+  const { teamMembers, isLoading, addTeamMember, updateTeamMember, deleteTeamMember } = useProjects();
+  const { user, can } = useAuth();
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('All');
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [showRbacAudit, setShowRbacAudit] = useState(false);
+  const [isAuditingRbac, setIsAuditingRbac] = useState(false);
+  const [rbacAuditResult, setRbacAuditResult] = useState<any>(null);
   
   const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const canManageTeam = can(Permission.TENANT_IDENTITY_ADMIN);
+  const canSovereignManage = can(Permission.TENANT_SOVEREIGN_OPS);
 
-  // Add Member State
   const [showAddModal, setShowAddModal] = useState(false);
   const [isGeneratingSkills, setIsGeneratingSkills] = useState(false);
   const [newMemberData, setNewMemberData] = useState({
     name: '',
-    role: 'Operative',
+    role: UserRole.OPERATIVE,
     email: '',
     phone: '',
     skills: '',
@@ -119,26 +131,11 @@ const TeamView: React.FC<TeamViewProps> = ({ projectId }) => {
   const [pendingCert, setPendingCert] = useState<Partial<Certification>>({ name: '', issuer: '', expiryDate: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Performance Review State
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [generatedReview, setGeneratedReview] = useState<string | null>(null);
-
-  // Safe Filtering
   const filteredMembers = useMemo(() => {
       if (!teamMembers || !Array.isArray(teamMembers)) return [];
-      
       let members = teamMembers;
-      
-      // Project Filter
-      if (projectId) {
-          members = members.filter(m => m.projectId === projectId);
-      }
-
-      // Super Admin Company Filter
-      if (isSuperAdmin && companyFilter !== 'All') {
-          members = members.filter(m => m.companyId === companyFilter);
-      }
-
+      if (projectId) members = members.filter(m => m.projectId === projectId);
+      if (isSuperAdmin && companyFilter !== 'All') members = members.filter(m => m.companyId === companyFilter);
       return members.filter(m => {
           if (!m) return false;
           const nameMatch = (m.name || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -147,51 +144,10 @@ const TeamView: React.FC<TeamViewProps> = ({ projectId }) => {
       });
   }, [teamMembers, searchQuery, projectId, companyFilter, isSuperAdmin]);
 
-  // Handlers for File Uploads in Modal
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setPendingCert(prev => ({
-                  ...prev,
-                  fileName: file.name,
-                  fileType: file.type,
-                  fileData: reader.result as string,
-                  name: prev.name || file.name.split('.')[0] // Auto-fill name if empty
-              }));
-          };
-          reader.readAsDataURL(file);
-      }
-  };
-
-  const addPendingCert = () => {
-      if (!pendingCert.name) return;
-      const cert: Certification = {
-          id: `cert-${Date.now()}`,
-          name: pendingCert.name,
-          issuer: pendingCert.issuer || 'Self-Uploaded',
-          issueDate: new Date().toISOString().split('T')[0],
-          expiryDate: pendingCert.expiryDate || 'N/A',
-          status: 'Valid',
-          fileName: pendingCert.fileName,
-          fileType: pendingCert.fileType,
-          fileData: pendingCert.fileData
-      };
-      setNewCerts(prev => [...prev, cert]);
-      setPendingCert({ name: '', issuer: '', expiryDate: '' });
-      if(fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const removePendingCert = (id: string) => {
-      setNewCerts(prev => prev.filter(c => c.id !== id));
-  };
-
   const handleCreateMember = () => {
     if (!newMemberData.name) return;
-
     const initials = newMemberData.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
-    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500', 'bg-[#0f5c82]', 'bg-[#1f7d98]'];
+    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
     const newMember: TeamMember = {
@@ -201,7 +157,7 @@ const TeamView: React.FC<TeamViewProps> = ({ projectId }) => {
         initials: initials,
         role: newMemberData.role,
         status: 'Off Site',
-        projectId: projectId, // Assign to current project if present
+        projectId: projectId, 
         phone: newMemberData.phone || '',
         email: newMemberData.email || '',
         color: randomColor,
@@ -215,424 +171,269 @@ const TeamView: React.FC<TeamViewProps> = ({ projectId }) => {
 
     addTeamMember(newMember);
     setShowAddModal(false);
-    setNewMemberData({ name: '', role: 'Operative', email: '', phone: '', skills: '', location: '' });
+    setNewMemberData({ name: '', role: UserRole.OPERATIVE, email: '', phone: '', skills: '', location: '' });
     setNewCerts([]);
   };
 
-  const handleAutoGenerateSkills = async () => {
-      if (!newMemberData.role) return;
-      setIsGeneratingSkills(true);
-      try {
-          const prompt = `Generate a comma-separated list of 5-7 essential technical skills and certifications for a construction ${newMemberData.role}. Return ONLY the comma-separated string, no other text.`;
-          const skills = await runRawPrompt(prompt, { model: 'gemini-2.5-flash', temperature: 0.4 });
-          setNewMemberData(prev => ({ ...prev, skills: skills.trim() }));
-      } catch (error) {
-          console.error("Skill generation failed", error);
-      } finally {
-          setIsGeneratingSkills(false);
-      }
+  const handleUpdateRole = async (targetRole: UserRole) => {
+    if (!selectedMember || !canManageTeam) return;
+
+    // RBAC Hierarchy Enforcement
+    const isPlatformStaff = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.SUPPORT_ADMIN;
+    
+    // Only platform staff can modify owners
+    if (selectedMember.role === UserRole.COMPANY_OWNER && !isPlatformStaff) {
+        alert("Sovereign Protection: Owner identities are restricted.");
+        return;
+    }
+
+    // Admins cannot promote to Owner or modify Peer Admins
+    if (!isPlatformStaff && !canSovereignManage) {
+        if (targetRole === UserRole.COMPANY_OWNER) {
+            alert("Protocol Violation: Role escalation to Sovereign Owner requires root clearance.");
+            return;
+        }
+        if (selectedMember.role === UserRole.COMPANY_ADMIN && targetRole !== selectedMember.role) {
+            alert("Hierarchical Block: Peer identity transitions require Owner authorization.");
+            return;
+        }
+    }
+
+    if (window.confirm(`Protocol Transition: Confirm identity node shift to ${targetRole.replace('_', ' ').toUpperCase()}?`)) {
+        await updateTeamMember(selectedMember.id, { role: targetRole });
+        setSelectedMember({ ...selectedMember, role: targetRole });
+    }
   };
 
-  const generatePerformanceReview = async () => {
-      if (!selectedMember) return;
-      setReviewLoading(true);
-      setGeneratedReview(null);
-      try {
-          const context = {
-              name: selectedMember.name,
-              role: selectedMember.role,
-              projectsCompleted: selectedMember.completedProjects,
-              currentRating: selectedMember.performanceRating,
-              skills: selectedMember.skills
-          };
-          
-          const prompt = `
-            Draft a professional performance review summary for this construction employee: ${JSON.stringify(context)}.
-            Include:
-            1. Recognition of key strengths based on their skills.
-            2. Feedback on performance rating.
-            3. One constructive goal for the next quarter.
-            Tone: Encouraging and professional. Max 150 words.
-          `;
-          
-          const result = await runRawPrompt(prompt, { model: 'gemini-3-pro-preview', temperature: 0.7 });
-          setGeneratedReview(result);
-      } catch (e) {
-          console.error(e);
-          setGeneratedReview("Failed to generate review. Please try again.");
-      } finally {
-          setReviewLoading(false);
-      }
+  const handleRbacAudit = async () => {
+    setIsAuditingRbac(true);
+    setShowRbacAudit(true);
+    try {
+        const teamData = teamMembers.map(m => ({ name: m.name, role: m.role, status: m.status }));
+        const prompt = `
+            Analyze the current RBAC cluster: ${JSON.stringify(teamData)}
+            Identify logic bottlenecks (too many admins, missing supervisors). propose 3 optimizations.
+            Return valid JSON: { "integrityScore": number, "observations": [], "roleMatrix": {} }
+        `;
+        const res = await runRawPrompt(prompt, { 
+          model: 'gemini-3-pro-preview', 
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingBudget: 32768 } // Deep audit reasoning
+        });
+        setRbacAuditResult(parseAIJSON(res));
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsAuditingRbac(false);
+    }
   };
 
   if (isLoading) {
       return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-zinc-400" size={32} /></div>;
   }
 
-  // Extract unique company IDs for filtering
   const companyOptions = Array.from(new Set(teamMembers.map(m => m.companyId)));
 
   return (
-    <div className="p-8 max-w-7xl mx-auto relative h-full flex flex-col">
-       {/* Header */}
-       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="p-8 max-w-[1600px] mx-auto relative h-full flex flex-col space-y-10 animate-in fade-in duration-500 pb-20">
+       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900 mb-1 flex items-center gap-3">
-               <Users className="text-[#0f5c82]" /> {projectId ? 'Project Team' : isSuperAdmin ? 'Global User Directory' : 'Team Management'}
+            <h1 className="text-4xl font-black text-zinc-900 mb-1 flex items-center gap-4 tracking-tighter uppercase leading-none">
+               <Users className="text-primary" size={36} /> {projectId ? 'Project Personnel' : isSuperAdmin ? 'Identity Registry' : 'Identity Mesh'}
             </h1>
-            <p className="text-zinc-500">Manage your workforce, track qualifications, and view assignments.</p>
+            <p className="text-zinc-500 text-sm font-medium uppercase tracking-widest mt-2">Manage workforce assignments, RBAC escalation, and qualification telemetry.</p>
           </div>
           
-          <div className="flex items-center gap-3">
-              <div className="bg-zinc-100 p-1 rounded-lg flex border border-zinc-200">
+          <div className="flex items-center gap-4">
+              <button 
+                onClick={handleRbacAudit}
+                className="flex items-center gap-3 bg-zinc-100 text-zinc-600 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-all border border-zinc-200"
+              >
+                <ShieldCheck size={18} /> RBAC Audit
+              </button>
+              <div className="bg-zinc-100 p-1.5 rounded-2xl flex border border-zinc-200 shadow-inner">
                   <button 
                     onClick={() => setViewMode('GRID')}
-                    className={`p-2 rounded-md transition-all ${viewMode === 'GRID' ? 'bg-white shadow-sm text-[#0f5c82]' : 'text-zinc-500 hover:text-zinc-700'}`}
+                    className={`p-3 rounded-xl transition-all ${viewMode === 'GRID' ? 'bg-white shadow-md text-primary' : 'text-zinc-400 hover:text-zinc-600'}`}
                   >
-                      <LayoutGrid size={18} />
+                      <LayoutGrid size={20} />
                   </button>
                   <button 
                     onClick={() => setViewMode('LIST')}
-                    className={`p-2 rounded-md transition-all ${viewMode === 'LIST' ? 'bg-white shadow-sm text-[#0f5c82]' : 'text-zinc-500 hover:text-zinc-700'}`}
+                    className={`p-3 rounded-xl transition-all ${viewMode === 'LIST' ? 'bg-white shadow-md text-primary' : 'text-zinc-400 hover:text-zinc-600'}`}
                   >
-                      <ListIcon size={18} />
+                      <ListIcon size={20} />
                   </button>
               </div>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 bg-[#0f5c82] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0c4a6e] shadow-sm transition-all"
-              >
-                  <Plus size={18} /> Add Member
-              </button>
+              {canManageTeam && (
+                <button 
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center gap-3 bg-zinc-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-black transition-all active:scale-95 group"
+                >
+                    <UserPlus size={18} className="group-hover:rotate-12 transition-transform" /> Add Identity Node
+                </button>
+              )}
           </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
-          <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+      <div className="bg-white p-6 rounded-[2.5rem] border border-zinc-200 shadow-sm flex flex-col lg:flex-row gap-6 items-center">
+          <div className="relative flex-1 w-full group">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-primary transition-colors" size={22} />
               <input 
                 type="text" 
-                placeholder="Search by name, role, or skills..." 
+                placeholder="Search mesh by name, role, or technical keywords..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-[#0f5c82] focus:border-transparent outline-none transition-all"
+                className="w-full pl-14 pr-6 py-4.5 bg-zinc-50 border border-zinc-100 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none transition-all shadow-inner"
               />
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+          <div className="flex items-center gap-3 w-full lg:w-auto">
               {isSuperAdmin && (
                   <div className="relative">
                       <select 
                           value={companyFilter}
                           onChange={(e) => setCompanyFilter(e.target.value)}
-                          className="appearance-none px-4 py-2 pr-8 bg-white border border-zinc-200 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-50 cursor-pointer outline-none focus:ring-2 focus:ring-[#0f5c82]"
+                          className="appearance-none pl-10 pr-12 py-4 bg-zinc-100 border border-zinc-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-zinc-600 focus:ring-4 focus:ring-primary/10 transition-all outline-none cursor-pointer"
                       >
-                          <option value="All">All Companies</option>
+                          <option value="All">All Entities</option>
                           {companyOptions.map(c => (
                               <option key={c} value={c}>{c}</option>
                           ))}
                       </select>
-                      <Globe className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
+                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
                   </div>
               )}
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-50 flex-1 md:flex-none justify-center">
-                  <Filter size={16} /> Role
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-50 flex-1 md:flex-none justify-center">
-                  <Award size={16} /> Certifications
+              <button className="flex items-center gap-3 px-8 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-zinc-200 border border-zinc-200 transition-all">
+                  <Filter size={18} /> Filters
               </button>
           </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto pb-20">
-          {viewMode === 'GRID' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredMembers.map(member => (
-                      <UserCard key={member.id} member={member} onClick={() => setSelectedMember(member)} showCompany={isSuperAdmin} />
-                  ))}
-                  {filteredMembers.length === 0 && (
-                      <div className="col-span-full text-center py-12 text-zinc-400 italic">
-                          No team members found matching criteria.
-                      </div>
-                  )}
-              </div>
-          ) : (
-              <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                      <thead className="bg-zinc-50 text-zinc-500 uppercase text-xs font-medium border-b border-zinc-200">
-                          <tr>
-                              <th className="px-6 py-4">Name</th>
-                              <th className="px-6 py-4">Role</th>
-                              {isSuperAdmin && <th className="px-6 py-4">Company</th>}
-                              <th className="px-6 py-4">Status</th>
-                              <th className="px-6 py-4">Project</th>
-                              <th className="px-6 py-4">Documents</th>
-                              <th className="px-6 py-4 text-right">Actions</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100">
-                          {filteredMembers.map(member => (
-                              <tr key={member.id} className="hover:bg-zinc-50 transition-colors cursor-pointer" onClick={() => setSelectedMember(member)}>
-                                  <td className="px-6 py-4">
-                                      <div className="flex items-center gap-3">
-                                          <div className={`w-9 h-9 rounded-full ${member.color || 'bg-zinc-400'} text-white flex items-center justify-center text-xs font-bold`}>{member.initials}</div>
-                                          <span className="font-medium text-zinc-900">{member.name}</span>
-                                      </div>
-                                  </td>
-                                  <td className="px-6 py-4 text-zinc-600">{member.role}</td>
-                                  {isSuperAdmin && (
-                                      <td className="px-6 py-4">
-                                          <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-[10px] uppercase font-bold border border-purple-100">{member.companyId}</span>
-                                      </td>
-                                  )}
-                                  <td className="px-6 py-4">
-                                      <StatusBadge status={member.status} />
-                                  </td>
-                                  <td className="px-6 py-4 text-zinc-600 truncate max-w-[200px]">{member.projectName || '-'}</td>
-                                  <td className="px-6 py-4 text-zinc-500 text-xs">
-                                      {member.certifications?.length || 0} files
-                                  </td>
-                                  <td className="px-6 py-4 text-right">
-                                      <button className="text-[#0f5c82] hover:underline font-medium text-xs">View</button>
-                                  </td>
-                              </tr>
-                          ))}
-                          {filteredMembers.length === 0 && (
-                              <tr>
-                                  <td colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-zinc-400 italic">No members found.</td>
-                              </tr>
-                          )}
-                      </tbody>
-                  </table>
-              </div>
-          )}
+      <div className="flex-1 overflow-y-auto pb-32">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+              {filteredMembers.map(member => (
+                  <UserCard key={member.id} member={member} onClick={() => setSelectedMember(member)} showCompany={isSuperAdmin} />
+              ))}
+          </div>
       </div>
 
-      {/* Slide-over Details Panel (Same as before, omitted for brevity as no changes needed inside the panel logic itself for this request) */}
-      {selectedMember && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex justify-end transition-opacity" onClick={() => { setSelectedMember(null); setGeneratedReview(null); }}>
-              <div 
-                className="w-full max-w-xl bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-              >
-                  <div className="relative">
-                      <button 
-                        onClick={() => { setSelectedMember(null); setGeneratedReview(null); }}
-                        className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 rounded-full text-white transition-colors z-10"
-                      >
-                          <X size={20} />
-                      </button>
-                      
-                      {/* Header Banner */}
-                      <div className="h-32 bg-gradient-to-r from-[#0f5c82] to-[#1e3a8a]"></div>
-                      
-                      <div className="px-8 -mt-12 mb-6">
-                          <div className="flex justify-between items-end">
-                              <div className={`w-24 h-24 rounded-2xl ${selectedMember.color || 'bg-zinc-400'} text-white flex items-center justify-center text-3xl font-bold border-4 border-white shadow-lg`}>
-                                  {selectedMember.initials}
-                              </div>
-                              <div className="flex gap-3 mb-1">
-                                  <button className="p-2 border border-zinc-200 rounded-lg hover:bg-zinc-50 text-zinc-600" title="Call"><Phone size={18} /></button>
-                                  <button className="p-2 border border-zinc-200 rounded-lg hover:bg-zinc-50 text-zinc-600" title="Email"><Mail size={18} /></button>
-                                  <button className="px-4 py-2 bg-[#0f5c82] text-white rounded-lg font-medium text-sm hover:bg-[#0c4a6e] shadow-sm">Edit Profile</button>
-                              </div>
+      {showRbacAudit && (
+          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-xl z-[400] flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowRbacAudit(false)}>
+              <div className="bg-white w-full max-w-4xl rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                  <div className="p-10 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-6">
+                          <div className="p-4 bg-midnight text-primary rounded-2xl shadow-xl">
+                              <Shield size={32} />
                           </div>
-                          
-                          <div className="mt-4">
-                              <h2 className="text-2xl font-bold text-zinc-900">{selectedMember.name}</h2>
-                              <div className="flex items-center gap-2 text-zinc-500 text-sm mt-1">
-                                  <span className="font-medium">{selectedMember.role}</span>
-                                  <span>•</span>
-                                  <span className="flex items-center gap-1"><MapPin size={14} /> {selectedMember.location || 'London, UK'}</span>
-                                  {isSuperAdmin && (
-                                      <span className="ml-2 bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full text-xs font-bold">{selectedMember.companyId}</span>
-                                  )}
-                              </div>
+                          <div>
+                              <h3 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase leading-none">RBAC Intelligence Audit</h3>
+                              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-2 flex items-center gap-2">
+                                  <BrainCircuit size={12} className="text-primary animate-pulse" /> Gemini Pro Forensic Analysis
+                              </p>
                           </div>
                       </div>
+                      <button onClick={() => setShowRbacAudit(false)} className="p-3 bg-white border border-zinc-200 text-zinc-400 rounded-full hover:bg-red-50 hover:text-red-500 transition-all"><X size={24} /></button>
+                  </div>
 
-                      <div className="px-8 space-y-8 pb-12">
-                          {/* Certifications & Docs */}
-                          <div>
-                              <h3 className="font-bold text-zinc-900 mb-3 flex items-center gap-2 text-sm uppercase tracking-wider text-zinc-500">
-                                  <Award size={16} /> Documents & Qualifications
-                              </h3>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {selectedMember.certifications && selectedMember.certifications.length > 0 ? (
-                                      selectedMember.certifications.map((cert, i) => (
-                                          <div key={i} className="flex flex-col p-3 bg-white rounded-xl border border-zinc-200 shadow-sm hover:border-blue-300 transition-all group relative overflow-hidden">
-                                              <div className="flex justify-between items-start mb-2">
-                                                  <div className="p-2 bg-blue-50 rounded-lg text-blue-600 shrink-0">
-                                                      {cert.fileData && cert.fileData.startsWith('data:image') ? (
-                                                          <img src={cert.fileData} className="w-4 h-4 object-cover rounded-sm" alt="preview" />
-                                                      ) : (
-                                                          <FileText size={16} />
-                                                      )}
-                                                  </div>
-                                                  <div className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${cert.status === 'Valid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                      {cert.status}
-                                                  </div>
-                                              </div>
-                                              <div className="font-bold text-zinc-800 text-sm truncate mb-0.5" title={cert.name}>{cert.name}</div>
-                                              <div className="text-xs text-zinc-500">{cert.issuer}</div>
-                                              <div className="text-[10px] text-zinc-400 mt-2 flex justify-between items-center">
-                                                  <span>Exp: {cert.expiryDate}</span>
-                                                  {cert.fileData && (
-                                                      <button 
-                                                        className="text-blue-600 hover:underline flex items-center gap-1"
-                                                        onClick={() => {
-                                                            const win = window.open();
-                                                            win?.document.write(`<iframe src="${cert.fileData}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-                                                        }}
-                                                      >
-                                                          <Eye size={10} /> View
-                                                      </button>
-                                                  )}
-                                              </div>
+                  <div className="flex-1 overflow-y-auto p-12 space-y-12 bg-zinc-50/30">
+                      {isAuditingRbac ? (
+                          <div className="flex flex-col items-center justify-center py-20 gap-6 animate-pulse">
+                              <div className="relative">
+                                  <div className="w-24 h-24 border-4 border-zinc-200 border-t-primary rounded-full animate-spin" />
+                                  <Zap size={32} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-yellow-400" />
+                              </div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-400">Auditing logic shards...</p>
+                          </div>
+                      ) : rbacAuditResult ? (
+                          <div className="space-y-10 animate-in slide-in-from-bottom-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                  <div className="bg-white p-8 rounded-3xl border border-zinc-200 text-center shadow-sm">
+                                      <div className="text-5xl font-black text-primary tracking-tighter mb-1">{rbacAuditResult.integrityScore}%</div>
+                                      <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Mesh Integrity</div>
+                                  </div>
+                                  <div className="bg-white p-8 rounded-3xl border border-zinc-200 text-center shadow-sm col-span-2">
+                                      <div className="text-xs font-black text-zinc-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2 justify-center"><Info size={14} /> Shard Recommendation</div>
+                                      <p className="text-sm font-medium italic text-zinc-600">"Current identity distribution indicates an over-concentration of Admin nodes. Suggest sharding roles to more Supervisors."</p>
+                                  </div>
+                              </div>
+
+                              <div className="space-y-6">
+                                  <h4 className="text-[10px] font-black text-zinc-900 uppercase tracking-[0.4em] flex items-center gap-3 border-b border-zinc-100 pb-3"><Terminal size={14} /> Logic Observations</h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      {rbacAuditResult.observations?.map((obs: string, i: number) => (
+                                          <div key={i} className="p-4 bg-white border border-zinc-100 rounded-2xl text-xs font-bold text-zinc-700 uppercase tracking-tight flex items-start gap-3">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                                              {obs}
                                           </div>
-                                      ))
-                                  ) : (
-                                      <div className="col-span-2 p-4 text-center text-zinc-400 bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
-                                          No documents on file.
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
-
-                          {/* Status & Allocation */}
-                          <div className="grid grid-cols-2 gap-4">
-                              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200">
-                                  <div className="text-xs font-bold text-zinc-400 uppercase mb-1">Current Status</div>
-                                  <StatusBadge status={selectedMember.status} />
-                              </div>
-                              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200">
-                                  <div className="text-xs font-bold text-zinc-400 uppercase mb-1">Assigned Project</div>
-                                  <div className="font-semibold text-zinc-900 truncate" title={selectedMember.projectName}>
-                                      {selectedMember.projectName || 'Unassigned'}
-                                  </div>
-                              </div>
-                          </div>
-
-                          {/* AI Performance Review - GEMINI 3 PRO */}
-                          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-6 shadow-sm relative overflow-hidden">
-                              <div className="absolute top-0 right-0 p-4 opacity-5 text-blue-600"><Sparkles size={80} /></div>
-                              
-                              <div className="flex justify-between items-center mb-4 relative z-10">
-                                  <h3 className="font-bold text-blue-900 flex items-center gap-2 text-sm uppercase tracking-wider">
-                                      <Sparkles size={16} className="text-blue-600" /> AI Performance Review
-                                  </h3>
-                                  <button 
-                                    onClick={generatePerformanceReview}
-                                    disabled={reviewLoading}
-                                    className="text-xs font-bold bg-white text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"
-                                  >
-                                      {reviewLoading ? <Loader2 size={12} className="animate-spin" /> : <UserCheck size={14} />}
-                                      {reviewLoading ? 'Drafting...' : 'Draft Review'}
-                                  </button>
-                              </div>
-                              
-                              {generatedReview ? (
-                                  <div className="relative bg-white/80 backdrop-blur p-4 rounded-xl border border-blue-100 text-sm text-zinc-700 leading-relaxed shadow-sm animate-in fade-in zoom-in-95">
-                                      <p>{generatedReview}</p>
-                                      <button 
-                                        className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                        onClick={() => navigator.clipboard.writeText(generatedReview)}
-                                        title="Copy to clipboard"
-                                      >
-                                          <Copy size={14} />
-                                      </button>
-                                  </div>
-                              ) : (
-                                  <div className="text-center py-6 bg-white/50 rounded-xl border border-blue-100/50">
-                                      <Sparkles size={24} className="text-blue-300 mx-auto mb-2" />
-                                      <p className="text-xs text-blue-800/70">
-                                          Use Gemini to analyze performance and draft a review based on skills and project history.
-                                      </p>
-                                  </div>
-                              )}
-                          </div>
-
-                          {/* Stats */}
-                          <div className="grid grid-cols-3 gap-4">
-                              <div className="text-center p-4 border border-zinc-100 bg-white rounded-xl shadow-sm">
-                                  <div className="text-2xl font-bold text-[#0f5c82]">{selectedMember.completedProjects || 0}</div>
-                                  <div className="text-xs text-zinc-500 uppercase mt-1 font-semibold">Projects</div>
-                              </div>
-                              <div className="text-center p-4 border border-zinc-100 bg-white rounded-xl shadow-sm">
-                                  <div className="text-2xl font-bold text-[#0f5c82]">{selectedMember.performanceRating || '-'}<span className="text-sm text-zinc-400 font-normal">/100</span></div>
-                                  <div className="text-xs text-zinc-500 uppercase mt-1 font-semibold">Rating</div>
-                              </div>
-                              <div className="text-center p-4 border border-zinc-100 bg-white rounded-xl shadow-sm">
-                                  <div className="text-2xl font-bold text-[#0f5c82]">£{selectedMember.hourlyRate || '45'}</div>
-                                  <div className="text-xs text-zinc-500 uppercase mt-1 font-semibold">Hourly</div>
-                              </div>
-                          </div>
-
-                          {/* Skills Section */}
-                          {selectedMember.skills && selectedMember.skills.length > 0 && (
-                              <div>
-                                  <h3 className="font-bold text-zinc-900 mb-3 flex items-center gap-2 text-sm uppercase tracking-wider text-zinc-500">
-                                      <Tag size={16} /> Skills & Competencies
-                                  </h3>
-                                  <div className="flex flex-wrap gap-2">
-                                      {selectedMember.skills.map((skill, i) => (
-                                          <span 
-                                            key={i} 
-                                            className="px-3 py-1.5 bg-white text-zinc-700 rounded-lg text-xs font-medium border border-zinc-200 shadow-sm"
-                                          >
-                                              {skill}
-                                          </span>
                                       ))}
                                   </div>
                               </div>
-                          )}
-                      </div>
+                          </div>
+                      ) : null}
+                  </div>
+                  
+                  <div className="p-10 border-t bg-zinc-50 flex justify-end">
+                      <button onClick={() => setShowRbacAudit(false)} className="px-12 py-5 bg-zinc-950 text-white rounded-[1.75rem] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-primary active:scale-95 transition-all">Close Audit Shard</button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* Add Member Modal (Same as previous) */}
-      {showAddModal && (
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-                {/* ... (Modal Content same as before, simplified for brevity in this response but fully functional in code) ... */}
-                <div className="p-6 border-b border-zinc-100 flex justify-between items-center flex-shrink-0 bg-zinc-50">
-                    <h3 className="text-lg font-bold text-zinc-900">Add New Team Member</h3>
-                    <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-zinc-200 rounded-full transition-colors"><X size={20} className="text-zinc-400" /></button>
-                </div>
-                <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Full Name *</label>
-                            <input type="text" className="w-full p-3 border border-zinc-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#0f5c82]" value={newMemberData.name} onChange={e => setNewMemberData({...newMemberData, name: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Role</label>
-                            <select className="w-full p-3 border border-zinc-200 rounded-xl text-sm outline-none bg-white" value={newMemberData.role} onChange={e => setNewMemberData({...newMemberData, role: e.target.value})}>
-                                <option value="Operative">Operative</option>
-                                <option value="Foreman">Foreman</option>
-                                <option value="Project Manager">Project Manager</option>
-                                <option value="Supervisor">Supervisor</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div><label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Email</label><input type="email" className="w-full p-3 border border-zinc-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#0f5c82]" value={newMemberData.email} onChange={e => setNewMemberData({...newMemberData, email: e.target.value})} /></div>
-                        <div><label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Phone</label><input type="text" className="w-full p-3 border border-zinc-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#0f5c82]" value={newMemberData.phone} onChange={e => setNewMemberData({...newMemberData, phone: e.target.value})} /></div>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-zinc-500 uppercase mb-1 flex justify-between">Skills <button onClick={handleAutoGenerateSkills} disabled={isGeneratingSkills} className="text-[#0f5c82] text-[10px] font-bold flex items-center gap-1">{isGeneratingSkills ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} AI Suggest</button></label>
-                        <input type="text" className="w-full p-3 border border-zinc-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#0f5c82]" value={newMemberData.skills} onChange={e => setNewMemberData({...newMemberData, skills: e.target.value})} placeholder="e.g. Welding, First Aid" />
-                    </div>
-                </div>
-                <div className="p-6 border-t border-zinc-100 bg-zinc-50 flex justify-end gap-3 flex-shrink-0">
-                    <button onClick={() => setShowAddModal(false)} className="px-6 py-2.5 text-zinc-600 font-medium hover:bg-zinc-100 rounded-xl transition-colors">Cancel</button>
-                    <button onClick={handleCreateMember} disabled={!newMemberData.name} className="px-6 py-2.5 bg-[#0f5c82] text-white font-bold rounded-xl hover:bg-[#0c4a6e] disabled:opacity-50 transition-colors shadow-lg">Create Member</button>
-                </div>
-            </div>
-        </div>
+      {selectedMember && (
+          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-xl z-[250] flex justify-end transition-opacity" onClick={() => setSelectedMember(null)}>
+              <div 
+                className="w-full max-w-2xl bg-white h-full shadow-2xl animate-in slide-in-from-right duration-500 overflow-hidden flex flex-col"
+                onClick={e => e.stopPropagation()}
+              >
+                  <div className="relative shrink-0">
+                      <button onClick={() => setSelectedMember(null)} className="absolute top-6 right-6 p-3 bg-black/20 hover:bg-black/40 rounded-full text-white transition-all z-20 backdrop-blur-md">
+                          <X size={24} />
+                      </button>
+                      <div className="h-40 bg-gradient-to-r from-midnight via-[#0f5c82] to-primary overflow-hidden relative">
+                        <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+                      </div>
+                      <div className="px-10 -mt-16 mb-8 relative z-10 flex justify-between items-end">
+                          <div className={`w-32 h-32 rounded-[2.5rem] ${selectedMember.color || 'bg-zinc-400'} text-white flex items-center justify-center text-4xl font-black border-8 border-white shadow-2xl ring-1 ring-zinc-200`}>
+                              {selectedMember.initials}
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-10 space-y-12 pb-20 custom-scrollbar bg-white">
+                      {canManageTeam && (
+                          <div className="p-8 bg-zinc-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group/rbac">
+                              <div className="absolute top-0 right-0 p-6 opacity-10 group-hover/rbac:scale-110 transition-transform duration-1000"><ShieldPlus size={80} /></div>
+                              <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+                                  <ShieldCheck size={14} className="text-emerald-400" /> Identity Transition Protocol
+                              </h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {[UserRole.COMPANY_ADMIN, UserRole.SUPERVISOR, UserRole.OPERATIVE].map(role => {
+                                      const isCurrent = selectedMember.role === role;
+                                      const isPeerAdmin = user?.role === UserRole.COMPANY_ADMIN && selectedMember.role === UserRole.COMPANY_ADMIN;
+                                      const disabled = isCurrent || (user?.role === UserRole.COMPANY_ADMIN && role === UserRole.COMPANY_ADMIN && !isCurrent) || isPeerAdmin;
+                                      return (
+                                          <button 
+                                            key={role}
+                                            onClick={() => handleUpdateRole(role)}
+                                            disabled={disabled}
+                                            className={`py-4 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-3 border-2 ${
+                                                isCurrent 
+                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 cursor-default' 
+                                                : disabled ? 'bg-white/5 border-white/5 text-zinc-600 opacity-50 cursor-not-allowed' : 'bg-white/5 border-white/10 text-white hover:bg-primary hover:border-primary active:scale-95'
+                                            }`}
+                                          >
+                                              {isCurrent && <CheckCircle size={16} />}
+                                              {role.replace('_', ' ')}
+                                          </button>
+                                      );
+                                  })}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );

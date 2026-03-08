@@ -1,37 +1,24 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-
-# Environment files - NEVER commit these with secrets
-.env
-.env.local
-.env.*.local
-.env.production
-.env.staging
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS files
-.DS_Store
-Thumbs.db
-
 # Logs
+logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Credentials - NEVER commit
-*.credentials
-credentials.json
-*.pem
-*.key
+node_modules
+dist
+dist-ssr
+*.local
 
-# GitHub secrets
-.github/secrets/
-.vercel
-.env*.local
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

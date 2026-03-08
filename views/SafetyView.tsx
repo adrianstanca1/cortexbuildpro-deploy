@@ -10,12 +10,14 @@ import {
 import { runRawPrompt, parseAIJSON } from '../services/geminiService';
 import { SafetyIncident, SafetyHazard } from '../types';
 import { useProjects } from '../contexts/ProjectContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SafetyViewProps {
   projectId?: string;
 }
 
 const SafetyView: React.FC<SafetyViewProps> = ({ projectId }) => {
+  const { user } = useAuth();
   const { safetyIncidents, addSafetyIncident, updateSafetyIncident } = useProjects();
   const [viewMode, setViewMode] = useState<'DASHBOARD' | 'SCANNER'>('DASHBOARD');
   
@@ -184,11 +186,13 @@ const SafetyView: React.FC<SafetyViewProps> = ({ projectId }) => {
   };
 
   const logHazard = async (hazard: SafetyHazard) => {
+    /* Fixed: Added companyId to the new SafetyIncident object to adhere to interface requirements. */
     const newIncident: SafetyIncident = {
       id: `si-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: hazard.type,
       project: projectId ? 'Current Project' : 'Site Assessment',
       projectId: projectId,
+      companyId: user?.companyId || 'c1',
       severity: hazard.severity,
       status: 'Open',
       date: new Date().toLocaleDateString(),
@@ -283,7 +287,7 @@ const SafetyView: React.FC<SafetyViewProps> = ({ projectId }) => {
                                       <div className="absolute top-full left-0 mt-2 w-64 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-xl p-4 text-white shadow-2xl opacity-0 group-hover/box:opacity-100 transition-all duration-200 pointer-events-none scale-95 group-hover/box:scale-100 origin-top-left z-50">
                                           <div className="flex justify-between items-start mb-2">
                                               <span className="font-bold text-sm text-white">{h.type}</span>
-                                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${h.severity === 'High' ? 'bg-red-500 text-white' : h.severity === 'Medium' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${h.severity === 'High' ? 'bg-red-50 text-red-700 text-white' : h.severity === 'Medium' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'}`}>
                                                   {h.severity}
                                               </span>
                                           </div>
@@ -558,7 +562,7 @@ const SafetyView: React.FC<SafetyViewProps> = ({ projectId }) => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    <div className={`w-2 h-2 rounded-full ${inc.status === 'Open' ? 'bg-red-500' : inc.status === 'Investigating' ? 'bg-orange-500' : 'bg-green-500'}`} />
+                                                    <div className={`w-2 h-2 rounded-full ${inc.status === 'Open' ? 'bg-red-50' : inc.status === 'Investigating' ? 'bg-orange-500' : 'bg-green-500'}`} />
                                                     <span className="text-zinc-700 font-medium">{inc.status}</span>
                                                 </div>
                                             </td>

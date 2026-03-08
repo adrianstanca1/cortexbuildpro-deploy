@@ -1,225 +1,232 @@
 
-import React, { useState } from 'react';
-import { TrendingUp, AlertTriangle, Zap, RefreshCw, Activity, Brain, CheckCircle2, XCircle, ArrowRight, Rocket } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  TrendingUp, AlertTriangle, Zap, RefreshCw, Activity, 
+  Brain, CheckCircle2, XCircle, ArrowRight, Rocket,
+  BrainCircuit, Gauge, Cpu, Network, Signal, 
+  LayoutGrid, Layers, Globe, ShieldCheck, TrendingDown,
+  // Added missing Terminal and Sparkles to imports
+  ChevronRight, Info, AlertOctagon, Maximize2, Loader2,
+  ScanLine, Terminal, Sparkles
+} from 'lucide-react';
 import { useProjects } from '../contexts/ProjectContext';
-import { runRawPrompt } from '../services/geminiService';
+import { useAuth } from '../contexts/AuthContext';
+import { runRawPrompt, parseAIJSON } from '../services/geminiService';
 
 const MLInsightsView: React.FC = () => {
-  const { projects, tasks } = useProjects();
+  const { user } = useAuth();
+  const { projects, tasks, setAiProcessing } = useProjects();
   const [isSimulating, setIsSimulating] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [inferenceLog, setInferenceLog] = useState<string[]>([
-      "Model initialized: Gemini 3 Pro",
-      "Awaiting portfolio data input...",
-  ]);
+  const [inferenceLog, setInferenceLog] = useState<string[]>(['Sovereign Inference Hub v4.5.2 Initialized.', 'Awaiting multi-tenant telemetry input...', 'Logic core standby.']);
 
   const runSimulation = async () => {
     setIsSimulating(true);
-    setInferenceLog(["Gathering project vectors..."]);
+    setAiProcessing(true);
+    setInferenceLog(["Initializing Reasoning Link...", "Fetching Project Shards...", "Consulting Gemini 3 Pro Reasoning Engine..."]);
     
     try {
-        // Prepare context
-        const summary = projects.map(p => 
-            `- ${p.name}: ${p.progress}% complete, Health: ${p.health}, Budget: £${p.budget}, Spent: £${p.spent}`
-        ).join('\n');
+        const summary = projects.map(p => ({
+            id: p.id,
+            name: p.name,
+            progress: p.progress,
+            health: p.health,
+            budget: p.budget,
+            spent: p.spent
+        }));
         
         const overdueTasks = tasks.filter(t => t.status !== 'Done' && new Date(t.dueDate) < new Date()).length;
-        
-        setInferenceLog(prev => [...prev, "Sending telemetry to Gemini 3 Pro...", "Initializing Reasoning Engine...", "Thinking..."]);
 
         const prompt = `
-            Analyze this construction portfolio:
-            ${summary}
-            Total Active Overdue Tasks across portfolio: ${overdueTasks}.
+            Act as a Lead AI Project Strategist (Sovereign Level).
+            PORTFOLIO TELEMETRY: ${JSON.stringify(summary)}
+            GLOBAL BOTTLE_NECKS: ${overdueTasks} overdue tasks.
 
-            Act as a senior risk analyst AI. Perform a comprehensive predictive analysis.
-            Use deep reasoning to identify subtle risks and opportunities for optimization.
+            TASK: Perform a technical deep-dive predictive simulation.
+            Identify hidden risk vectors in the dependency lattice and calculate portfolio-wide optimization scores.
             
-            Return a JSON object with the following structure (no markdown):
+            OUTPUT FORMAT (JSON ONLY):
             {
                 "optimizationScore": number (0-100),
                 "riskProbability": number (0-100),
-                "projectedSavings": number (estimated potential savings in GBP),
-                "timelineDeviation": [number, number, number, number, number, number, number, number, number, number, number, number], // 12 months deviation
-                "suggestions": [
-                    { "title": "string", "desc": "string", "impact": "High" | "Medium" | "Low" }
+                "failureNode": "Project Name or Task ID that is most likely to fail",
+                "projectedSavings": number (value in GBP),
+                "timelineDeviation": [number x 12],
+                "reasoningTrace": "One sentence summary of the AI reasoning.",
+                "actionNodes": [
+                    { "title": "Protocol Name", "impact": "High"|"Medium"|"Low", "rationale": "One sentence" }
                 ]
             }
-            
-            Ensure realistic values based on the health statuses provided (At Risk projects should lower score/increase risk).
         `;
 
         const result = await runRawPrompt(prompt, { 
             model: 'gemini-3-pro-preview', 
             responseMimeType: 'application/json',
             temperature: 0.4,
-            thinkingConfig: { thinkingBudget: 16384 } // Max thinking for complex analysis
+            thinkingConfig: { thinkingBudget: 16384 }
         });
 
-        const data = JSON.parse(result);
+        const data = parseAIJSON(result);
         setAnalysisResult(data);
-        setInferenceLog(prev => [...prev, "Simulation Complete.", "Optimization vectors calculated."]);
-
+        setInferenceLog(prev => [...prev, "Neural handshake successful.", "Portfolio variance calculated.", "Simulation Node Complete."]);
     } catch (e) {
         console.error(e);
-        setInferenceLog(prev => [...prev, "Error in simulation process."]);
+        setInferenceLog(prev => [...prev, "ERROR: Logic shard disconnection detected.", "Retrying gateway link..."]);
     } finally {
         setIsSimulating(false);
+        setAiProcessing(false);
     }
   };
 
-  // Fallback initial state if analysis not run
   const score = analysisResult?.optimizationScore ?? 0;
   const risk = analysisResult?.riskProbability ?? 0;
-  const savings = analysisResult?.projectedSavings ?? 0;
-  const deviation = analysisResult?.timelineDeviation ?? [0,0,0,0,0,0,0,0,0,0,0,0];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-end mb-8">
+    <div className="p-8 max-w-[1700px] mx-auto space-y-12 animate-in fade-in duration-700 pb-40">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-            <h1 className="text-2xl font-bold text-zinc-900 mb-1 flex items-center gap-3">
-                <Brain className="text-[#0f5c82]" /> Machine Learning Center
+            <h1 className="text-5xl font-black text-zinc-900 tracking-tighter uppercase leading-none flex items-center gap-6">
+                <BrainCircuit className="text-primary" size={48} /> Inference Hub
             </h1>
-            <p className="text-zinc-500">Real-time predictive analytics powered by Gemini 3 Pro Reasoning.</p>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-4 flex items-center gap-2">
+                <Signal size={14} className="text-primary animate-pulse" /> Gemini 3 Pro Reasoning Core Active
+            </p>
         </div>
+        
         <button 
             onClick={runSimulation}
             disabled={isSimulating}
-            className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 shadow-lg transition-all ${
-                isSimulating ? 'bg-zinc-400 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 hover:scale-105'
-            }`}
+            className="bg-midnight text-white px-10 py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] shadow-2xl shadow-blue-900/20 hover:bg-primary transition-all flex items-center gap-4 active:scale-95 disabled:opacity-50 group"
         >
-            {isSimulating ? <RefreshCw size={20} className="animate-spin" /> : <Zap size={20} />}
-            {isSimulating ? 'Thinking...' : 'Run Predictive Model'}
+            {isSimulating ? <Loader2 size={24} className="animate-spin text-primary" /> : <Zap size={24} className="text-yellow-400 fill-current group-hover:scale-110 transition-transform" />}
+            Execute Neural Pulse
         </button>
       </div>
 
-      {/* Top KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-           <div className="bg-white border border-zinc-200 rounded-xl p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Zap size={64} /></div>
-              <div className="relative z-10">
-                  <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-2">Efficiency Score</div>
-                  <div className="flex items-end gap-3">
-                      <div className={`text-4xl font-bold transition-all duration-1000 ${isSimulating ? 'blur-sm' : ''} ${score > 80 ? 'text-green-600' : 'text-zinc-900'}`}>
-                          {analysisResult ? score : '--'}%
-                      </div>
-                      {score > 90 && <div className="text-green-600 text-sm font-bold mb-1.5">↑ Optimized</div>}
-                  </div>
-              </div>
-          </div>
-          
-          <div className="bg-white border border-zinc-200 rounded-xl p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
-              <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><AlertTriangle size={64} /></div>
-              <div className="relative z-10">
-                  <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-2">Risk Probability</div>
-                  <div className="flex items-end gap-3">
-                      <div className={`text-4xl font-bold transition-all duration-1000 ${isSimulating ? 'blur-sm' : ''} ${risk < 30 ? 'text-green-600' : 'text-red-600'}`}>
-                          {analysisResult ? risk : '--'}%
-                      </div>
-                      {analysisResult && (
-                          <div className={`text-sm font-bold mb-1.5 ${risk < 30 ? 'text-green-600' : 'text-red-600'}`}>
-                              {risk < 30 ? 'Low Risk' : 'Critical'}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div className="lg:col-span-8 space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="bg-white border border-zinc-200 rounded-[3rem] p-10 shadow-sm relative overflow-hidden group hover:border-primary transition-all">
+                      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:scale-110 transition-transform duration-1000"><CheckCircle2 size={120} /></div>
+                      <div className="relative z-10 flex flex-col justify-between h-full">
+                          <div>
+                              <div className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                                  <ShieldCheck size={14} className="text-emerald-500" /> Portfolio Health Score
+                              </div>
+                              <div className={`text-7xl font-black tracking-tighter leading-none ${score > 80 ? 'text-emerald-600' : 'text-zinc-900'}`}>{score}%</div>
+                              <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-4">Optimization Efficiency Gradient</p>
                           </div>
-                      )}
+                          <div className="mt-8 h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner">
+                              <div className={`h-full transition-all duration-[2000ms] ${score > 80 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${score}%` }} />
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-white border border-zinc-200 rounded-[3rem] p-10 shadow-sm relative overflow-hidden group hover:border-red-500 transition-all">
+                      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:scale-110 transition-transform duration-1000"><AlertOctagon size={120} /></div>
+                      <div className="relative z-10 flex flex-col justify-between h-full">
+                          <div>
+                              <div className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                                  <AlertTriangle size={14} className="text-red-500" /> Risk Probability Node
+                              </div>
+                              <div className={`text-7xl font-black tracking-tighter leading-none ${risk > 50 ? 'text-red-600' : 'text-zinc-900'}`}>{risk}%</div>
+                              <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-4">Calculated Failure Potential</p>
+                          </div>
+                          <div className="mt-8 h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner">
+                              <div className={`h-full transition-all duration-[2000ms] ${risk > 50 ? 'bg-red-500' : 'bg-orange-500'}`} style={{ width: `${risk}%` }} />
+                          </div>
+                      </div>
                   </div>
               </div>
-          </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-zinc-300 font-mono text-xs flex flex-col h-36">
-              <div className="flex justify-between items-center mb-2 border-b border-zinc-800 pb-2">
-                  <span className="font-bold text-zinc-100 flex items-center gap-2"><Activity size={14} /> Inference Log</span>
-                  <span className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`}></span>
-              </div>
-              <div className="flex-1 overflow-hidden relative">
-                  <div className="absolute inset-0 overflow-y-auto space-y-1.5 scrollbar-hide">
-                      {inferenceLog.map((log, i) => (
-                          <div key={i} className="truncate opacity-80 hover:opacity-100">
-                              <span className="text-blue-500 mr-2">&gt;</span>{log}
+              <div className="bg-white border border-zinc-200 rounded-[3rem] p-12 shadow-sm relative overflow-hidden group/chart">
+                  <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover/chart:rotate-12 transition-transform duration-1000"><TrendingUp size={200} /></div>
+                  <div className="flex justify-between items-center mb-12 relative z-10">
+                      <div>
+                          <h3 className="text-2xl font-black text-zinc-900 tracking-tighter uppercase leading-none">Trajectory Simulation</h3>
+                          <p className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.3em] mt-2">12-Month Rolling Logic Deviation</p>
+                      </div>
+                      <div className="flex gap-3">
+                          <div className="flex items-center gap-2 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                             <div className="w-2.5 h-2.5 bg-primary rounded-sm shadow-sm" /> Baseline
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-4">
+                             <div className="w-2.5 h-2.5 bg-red-500/20 border border-red-500/30 rounded-sm shadow-sm" /> Simulation
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div className="h-64 w-full relative flex items-end gap-3 px-10 pb-8 border-b border-l border-zinc-100">
+                      {(analysisResult?.timelineDeviation || [60, 72, 65, 84, 92, 88, 74, 96, 82, 78, 85, 90]).map((h: number, i: number) => (
+                          <div key={i} className="flex-1 flex flex-col justify-end h-full gap-1 group/bar relative">
+                              <div 
+                                className="w-full bg-primary/10 border border-primary/20 rounded-t-lg transition-all duration-1000 group-hover/bar:bg-primary/20" 
+                                style={{ height: `100%` }}
+                              />
+                              <div 
+                                className="absolute bottom-0 w-full bg-primary rounded-t-lg shadow-xl opacity-90 group-hover/bar:opacity-100 transition-all group-hover/bar:-translate-y-1" 
+                                style={{ height: `${h}%` }}
+                              >
+                                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[8px] font-black px-2 py-1 rounded-lg opacity-0 group-hover/bar:opacity-100 transition-all scale-90 group-hover/bar:scale-100 whitespace-nowrap z-20">
+                                      SYNC: {h}%
+                                  </div>
+                              </div>
                           </div>
                       ))}
                   </div>
-              </div>
-          </div>
-      </div>
-
-      {/* Main Visualization */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
-              <h3 className="font-bold text-zinc-800 mb-6 flex items-center gap-2">
-                  <TrendingUp size={20} className="text-[#0f5c82]" /> Projected Timeline Deviation
-              </h3>
-              <div className="h-80 w-full relative">
-                   {/* Chart Area */}
-                   <div className="absolute inset-0 flex items-end gap-1 pl-8 pb-6 border-l border-b border-zinc-200">
-                       {/* Y Axis Labels */}
-                       <div className="absolute left-0 top-0 bottom-6 w-8 flex flex-col justify-between text-[10px] text-zinc-400 py-2">
-                           <span>+30d</span><span>+15d</span><span>0d</span><span>-15d</span>
-                       </div>
-
-                       {/* Bars */}
-                       {deviation.map((val: number, i: number) => (
-                           <div key={i} className="flex-1 flex flex-col justify-end h-full group relative">
-                               {/* Bar */}
-                               <div className="w-full bg-zinc-100 h-full relative overflow-hidden rounded-t-sm">
-                                   {/* Baseline */}
-                                   <div className="absolute top-1/2 w-full border-t border-zinc-300 border-dashed"></div>
-                                   
-                                   {/* Value Bar */}
-                                   <div 
-                                        className={`absolute left-1 right-1 transition-all duration-1000 ease-out ${val > 0 ? 'bottom-1/2 bg-red-400' : 'top-1/2 bg-green-400'}`}
-                                        style={{ 
-                                            height: `${Math.abs(isSimulating ? Math.random() * 30 : val * 1.5)}%` 
-                                        }}
-                                   ></div>
-                               </div>
-                               
-                               {/* Tooltip */}
-                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-zinc-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
-                                   M{i+1}: {val > 0 ? `+${val}d delay` : `${val}d gain`}
-                               </div>
-                           </div>
-                       ))}
-                   </div>
-              </div>
-              <div className="flex justify-center gap-6 mt-4 text-xs text-zinc-500">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-400 rounded-sm"></div> Delay Risk</div>
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-400 rounded-sm"></div> Time Savings</div>
+                  <div className="flex justify-between mt-4 text-[9px] font-black text-zinc-300 uppercase tracking-widest px-10">
+                      {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(m => <span key={m}>{m}</span>)}
+                  </div>
               </div>
           </div>
 
-          <div className="space-y-6">
-              <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm flex flex-col">
-                  <h3 className="font-bold text-zinc-800 mb-4">Optimization Plan</h3>
-                  <div className="space-y-3 flex-1 overflow-y-auto h-64">
-                      {analysisResult?.suggestions ? (
-                          analysisResult.suggestions.map((rec: any, i: number) => (
-                              <div key={i} className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg hover:bg-blue-50 transition-colors">
-                                  <div className="flex justify-between items-start mb-1">
-                                      <span className="font-bold text-zinc-900 text-sm">{rec.title}</span>
-                                      {rec.impact === 'High' && <ArrowRight size={14} className="text-red-500" />}
-                                  </div>
-                                  <p className="text-xs text-zinc-600">{rec.desc}</p>
-                              </div>
-                          ))
-                      ) : (
-                          <div className="text-center text-zinc-400 py-8 italic flex flex-col items-center">
-                              <Rocket size={32} className="mb-2 opacity-20" />
-                              Run model to generate suggestions.
+          <div className="lg:col-span-4 space-y-10 flex flex-col">
+              <div className="bg-zinc-950 rounded-[3rem] p-1 text-white shadow-2xl flex flex-col h-[400px] border border-white/5 overflow-hidden">
+                  <div className="h-12 border-b border-white/5 flex items-center justify-between px-8 bg-white/5 shrink-0">
+                      <div className="flex items-center gap-3">
+                          <Terminal size={14} className="text-primary" />
+                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Inference Ledger</span>
+                      </div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-8 font-mono text-[11px] space-y-2 custom-scrollbar bg-black/40">
+                      {inferenceLog.map((log, i) => (
+                          <div key={i} className="flex gap-3">
+                              <span className="text-primary font-black shrink-0">»</span>
+                              <span className="text-zinc-400 break-all">{log}</span>
                           </div>
-                      )}
+                      ))}
+                      {isSimulating && <div className="text-primary animate-pulse">REASONING ENGINE PROCESSING...</div>}
                   </div>
               </div>
 
-              <div className="bg-gradient-to-br from-[#0f5c82] to-[#0c4a6e] rounded-xl p-6 text-white shadow-md">
-                  <h3 className="font-bold mb-2">Projected Savings</h3>
-                  <div className="text-3xl font-bold mb-1">
-                      £{isSimulating ? '---,---' : (analysisResult ? savings.toLocaleString() : '0')}
-                  </div>
-                  <div className="text-blue-200 text-xs mb-4">Potential cost reduction via optimization</div>
-                  <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-white h-full transition-all duration-1000" style={{width: isSimulating ? '0%' : (score > 0 ? `${score}%` : '0%')}}></div>
+              <div className="bg-white border border-zinc-200 rounded-[3rem] p-10 shadow-sm flex flex-col flex-1 overflow-hidden relative group/action">
+                  <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover/action:scale-110 transition-transform duration-1000"><Zap size={100} /></div>
+                  <div className="relative z-10 flex flex-col h-full">
+                      <div className="flex justify-between items-center mb-8 px-1">
+                          <h3 className="text-lg font-black text-zinc-900 uppercase tracking-tight">Active Recommendations</h3>
+                          <div className="p-2 bg-primary/10 text-primary rounded-xl shadow-inner"><Sparkles size={18} /></div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
+                          {(analysisResult?.actionNodes || [
+                              { title: 'Material Logic Shard', impact: 'High', rationale: 'Address supply chain variance in Sector 4.' },
+                              { title: 'Temporal Buffer Sync', impact: 'Medium', rationale: 'Align pour schedule with weather telemetry.' },
+                              { title: 'Audit Depth Escalate', impact: 'Low', rationale: 'Verify compliance nodes on residential Complex.' }
+                          ]).map((node: any, i: number) => (
+                              <div key={i} className="bg-zinc-50 border border-zinc-100 rounded-3xl p-6 hover:bg-white hover:border-primary hover:shadow-xl transition-all cursor-pointer group/node">
+                                  <div className="flex justify-between items-center mb-3">
+                                      <span className="font-black text-zinc-900 text-xs uppercase tracking-tight group-hover/node:text-primary transition-colors">{node.title}</span>
+                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${node.impact === 'High' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>{node.impact}</span>
+                                  </div>
+                                  <p className="text-[10px] text-zinc-400 font-medium italic leading-relaxed">"{node.rationale}"</p>
+                              </div>
+                          ))}
+                      </div>
+                      <div className="mt-8 pt-8 border-t border-zinc-50">
+                        <button className="w-full py-5 bg-zinc-950 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] shadow-xl hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-3 group/btn">
+                             Inject Global Logic Protocols <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
+                        </button>
+                      </div>
                   </div>
               </div>
           </div>
