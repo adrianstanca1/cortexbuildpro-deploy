@@ -353,7 +353,17 @@ class DatabaseService {
   async getTeam(): Promise<TeamMember[]> { return this.getAll<TeamMember>(STORES.TEAM); }
   async addTeamMember(m: TeamMember) { return this.add(STORES.TEAM, m); }
 
-  async getDocuments(): Promise<ProjectDocument[]> { return this.getAll<ProjectDocument>(STORES.DOCUMENTS); }
+  async getDocuments(projectId?: string): Promise<ProjectDocument[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/documents`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch documents from backend", e);
+      }
+    }
+    return this.getAll<ProjectDocument>(STORES.DOCUMENTS); 
+  }
   async addDocument(d: ProjectDocument) { return this.add(STORES.DOCUMENTS, d); }
   async updateDocument(id: string, d: Partial<ProjectDocument>) {
       const docs = await this.getDocuments();
@@ -364,7 +374,17 @@ class DatabaseService {
   async getClients(): Promise<Client[]> { return this.getAll<Client>(STORES.CLIENTS); }
   async addClient(c: Client) { return this.add(STORES.CLIENTS, c); }
 
-  async getInventory(): Promise<InventoryItem[]> { return this.getAll<InventoryItem>(STORES.INVENTORY); }
+  async getInventory(companyId: string = 'c1'): Promise<InventoryItem[]> { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/inventory?companyId=${companyId}`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch inventory from backend", e);
+      }
+    }
+    return this.getAll<InventoryItem>(STORES.INVENTORY); 
+  }
   async addInventoryItem(i: InventoryItem) { return this.add(STORES.INVENTORY, i); }
   async updateInventoryItem(id: string, i: Partial<InventoryItem>) {
       const items = await this.getInventory();
@@ -372,13 +392,43 @@ class DatabaseService {
       if(existing) await this.update(STORES.INVENTORY, { ...existing, ...i });
   }
 
-  async getRFIs(): Promise<RFI[]> { return this.getAll<RFI>(STORES.RFIS); }
+  async getRFIs(projectId?: string): Promise<RFI[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/rfis`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch RFIs from backend", e);
+      }
+    }
+    return this.getAll<RFI>(STORES.RFIS); 
+  }
   async addRFI(item: RFI) { return this.add(STORES.RFIS, item); }
 
-  async getPunchItems(): Promise<PunchItem[]> { return this.getAll<PunchItem>(STORES.PUNCH_ITEMS); }
+  async getPunchItems(projectId?: string): Promise<PunchItem[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/punch-items`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch punch items from backend", e);
+      }
+    }
+    return this.getAll<PunchItem>(STORES.PUNCH_ITEMS); 
+  }
   async addPunchItem(item: PunchItem) { return this.add(STORES.PUNCH_ITEMS, item); }
 
-  async getDailyLogs(): Promise<DailyLog[]> { return this.getAll<DailyLog>(STORES.DAILY_LOGS); }
+  async getDailyLogs(projectId?: string): Promise<DailyLog[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/daily-logs`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch daily logs from backend", e);
+      }
+    }
+    return this.getAll<DailyLog>(STORES.DAILY_LOGS); 
+  }
   async addDailyLog(item: DailyLog) { return this.add(STORES.DAILY_LOGS, item); }
 
   async getDayworks(): Promise<Daywork[]> { return this.getAll<Daywork>(STORES.DAYWORKS); }

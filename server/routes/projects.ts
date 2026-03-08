@@ -93,4 +93,95 @@ router.patch('/:id', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get RFIs for a project
+ * GET /api/projects/:id/rfis
+ */
+router.get('/:id/rfis', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM rfis WHERE project_id = $1 ORDER BY created_at DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch RFIs error:', error);
+    res.status(500).json({ error: 'Failed to fetch RFIs' });
+  }
+});
+
+/**
+ * Get Punch Items for a project
+ * GET /api/projects/:id/punch-items
+ */
+router.get('/:id/punch-items', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM punch_items WHERE project_id = $1 ORDER BY created_at DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch punch items error:', error);
+    res.status(500).json({ error: 'Failed to fetch punch items' });
+  }
+});
+
+/**
+ * Get Daily Logs for a project
+ * GET /api/projects/:id/daily-logs
+ */
+router.get('/:id/daily-logs', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM daily_logs WHERE project_id = $1 ORDER BY date DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch daily logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch daily logs' });
+  }
+});
+
+/**
+ * Get Documents for a project
+ * GET /api/projects/:id/documents
+ */
+router.get('/:id/documents', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM documents WHERE project_id = $1 ORDER BY created_at DESC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch documents error:', error);
+    res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+/**
+ * Get Team Members for a project
+ * GET /api/projects/:id/team
+ */
+router.get('/:id/team', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM users WHERE current_project_id = $1 OR id IN (SELECT user_id FROM timesheets WHERE project_id = $1)', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch team error:', error);
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
+/**
+ * Get Inventory for a company
+ * GET /api/inventory?companyId=c1
+ */
+router.get('/inventory', async (req: Request, res: Response) => {
+  try {
+    const { companyId } = req.query;
+    if (!companyId) return res.status(400).json({ error: 'companyId is required' });
+    const result = await query('SELECT * FROM inventory WHERE company_id = $1', [companyId as string]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch inventory error:', error);
+    res.status(500).json({ error: 'Failed to fetch inventory' });
+  }
+});
+
 export default router;

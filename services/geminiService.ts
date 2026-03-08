@@ -102,7 +102,7 @@ export const streamChatResponse = async (
     
     const messageContent = { parts: parts.length > 0 ? parts : [{ text: "Analyze this." }] };
 
-    const result = await chat.sendMessageStream({ message: messageContent });
+    const result = await chat.sendMessageStream({ message: messageContent.parts });
     
     let finalResponse: GenerateContentResponse | undefined;
     for await (const chunk of result) {
