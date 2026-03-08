@@ -6,7 +6,7 @@
 // GitHub App Configuration
 // Store these in environment variables in production
 const GITHUB_CONFIG = {
-  clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || 'Iv23lihOkwvRyu8n7WdY', // GitHub App Client ID
+  clientId: import.meta.env.VITE_GITHUB_CLIENT_ID, // GitHub App Client ID
   clientSecret: '', // Set via environment variable in production (server-side only)
   redirectUri: '/auth/callback',
   appName: 'CortexBuildPro',

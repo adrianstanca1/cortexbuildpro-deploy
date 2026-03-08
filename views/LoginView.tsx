@@ -35,7 +35,9 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
       // Open GitHub OAuth popup
       const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
       if (!clientId) {
-        throw new Error('GitHub OAuth not configured. Please set VITE_GITHUB_CLIENT_ID in environment.');
+        setError('GitHub OAuth not configured. Please set VITE_GITHUB_CLIENT_ID in environment.');
+        setIsLoading(null);
+        return;
       }
       const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
       const scope = encodeURIComponent('user:email read:user');
@@ -132,7 +134,9 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
       if (!clientId) {
-        throw new Error('Google OAuth not configured. Please set VITE_GOOGLE_CLIENT_ID in environment.');
+        setError('Google OAuth not configured. Please set VITE_GOOGLE_CLIENT_ID in environment.');
+        setIsLoading(null);
+        return;
       }
 
       // Generate and store state for CSRF protection

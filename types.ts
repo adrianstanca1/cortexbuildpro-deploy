@@ -254,6 +254,7 @@ export interface RFI {
   number: string;
   subject: string;
   question: string;
+  description?: string; // Detailed context
   assignedTo: string;
   status: 'Open' | 'Closed';
   dueDate: string;
@@ -271,6 +272,7 @@ export interface PunchItem {
   status: 'Open' | 'Closed' | 'Resolved';
   createdAt: string;
   assignedTo?: string;
+  dueDate?: string; // Target completion date
 }
 
 export interface DailyLog {
@@ -280,8 +282,12 @@ export interface DailyLog {
   weather: string;
   crewCount: number;
   workPerformed: string;
+  activities?: string; // Detailed activity breakdown
+  workforce?: number; // Total manpower on site
   notes?: string;
   author: string;
+  createdBy?: string; // Author identifier
+  status?: string; // Log status (e.g. Draft, Submitted)
   createdAt: string;
 }
 
