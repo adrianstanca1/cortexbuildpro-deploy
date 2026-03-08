@@ -13,6 +13,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const { URLSearchParams, URL } = require('url');
 const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -33,10 +34,22 @@ else {
   console.log("API KEY FOUND (proxy will use this)")
 }
 
+// CORS configuration
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 // Limit body size to 50mb
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
+
+// GitHub OAuth routes
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
 
 // Rate limiter for the proxy
 const proxyLimiter = rateLimit({
@@ -242,6 +255,15 @@ app.get('/service-worker.js', (req, res) => {
 
 app.use('/public', express.static(publicPath));
 app.use(express.static(staticPath));
+
+// Auth routes for GitHub OAuth
+try {
+    const authRoutes = require('./routes/auth');
+    app.use('/api/auth', authRoutes);
+    console.log('Auth routes mounted at /api/auth');
+} catch (err) {
+    console.warn('Auth routes not loaded:', err.message);
+}
 
 // Start the HTTP server
 const server = app.listen(port, () => {

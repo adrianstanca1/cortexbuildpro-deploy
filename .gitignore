@@ -4,10 +4,12 @@ node_modules/
 # Build output
 dist/
 
-# Environment files
+# Environment files - NEVER commit these with secrets
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 
 # IDE
 .idea/
@@ -23,6 +25,11 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Credentials
+# Credentials - NEVER commit
 *.credentials
 credentials.json
+*.pem
+*.key
+
+# GitHub secrets
+.github/secrets/
