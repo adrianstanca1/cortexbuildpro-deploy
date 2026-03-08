@@ -12,6 +12,13 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Generate a random state parameter for CSRF protection
+  const generateState = (): string => {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleDemoLogin = async (role: UserRole) => {
     login(role);
     setPage(Page.IMAGINE);
@@ -21,11 +28,18 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
     setIsLoading('github');
     setError(null);
     try {
+      // Generate and store state for CSRF protection
+      const state = generateState();
+      sessionStorage.setItem('oauth_state', state);
+
       // Open GitHub OAuth popup
-      const clientId = 'Iv23lihOkwvRyu8n7WdY';
+      const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('GitHub OAuth not configured. Please set VITE_GITHUB_CLIENT_ID in environment.');
+      }
       const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
       const scope = encodeURIComponent('user:email read:user');
-      const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+      const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
 
       const popup = window.open(authUrl, 'github-oauth', 'width=600,height=800');
 
@@ -35,8 +49,24 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
 
       // Listen for OAuth callback
       const handleMessage = async (event: MessageEvent) => {
+        // Security: Validate origin to prevent cross-origin message attacks
+        if (event.origin !== window.location.origin) {
+          console.warn('Received message from unexpected origin:', event.origin);
+          return;
+        }
+
         if (event.data?.type === 'github_oauth_callback') {
           window.removeEventListener('message', handleMessage);
+
+          // Security: Validate state parameter for CSRF protection
+          const storedState = sessionStorage.getItem('oauth_state');
+          if (!storedState || event.data.state !== storedState) {
+            setError('Invalid OAuth state. Possible CSRF attack detected.');
+            setIsLoading(null);
+            sessionStorage.removeItem('oauth_state');
+            return;
+          }
+          sessionStorage.removeItem('oauth_state');
 
           if (event.data.error) {
             setError(event.data.error);
@@ -99,58 +129,54 @@ const LoginView: React.FC<LoginViewProps> = ({ setPage }) => {
     setIsLoading('google');
     setError(null);
     try {
-      // Use Google Identity Services
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
       if (!clientId) {
-        // Fallback: Use popup flow with backend
-        const { google } = window as any;
-        if (google?.accounts?.id) {
-          google.accounts.id.initialize({
-            client_id: clientId,
-            callback: async (response: any) => {
-              if (response.credential) {
-                // Send ID token to backend for verification
-                try {
-                  const res = await fetch('/api/auth/google/verify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ credential: response.credential }),
-                  });
+        throw new Error('Google OAuth not configured. Please set VITE_GOOGLE_CLIENT_ID in environment.');
+      }
 
-                  const data = await res.json();
-                  loginWithOAuth(data.user);
-                  setPage(Page.IMAGINE);
-                } catch (err) {
-                  setError('Google authentication failed');
+      // Generate and store state for CSRF protection
+      const state = generateState();
+      sessionStorage.setItem('oauth_state', state);
+
+      // Use Google Identity Services
+      const { google } = window as any;
+      if (google?.accounts?.id) {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: any) => {
+            if (response.credential) {
+              // Send ID token to backend for verification
+              try {
+                const res = await fetch('/api/auth/google/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ credential: response.credential, state }),
+                });
+
+                const data = await res.json();
+
+                // Security: Validate state if returned by backend
+                if (data.state && data.state !== sessionStorage.getItem('oauth_state')) {
+                  setError('Invalid OAuth state. Possible CSRF attack detected.');
+                  setIsLoading(null);
+                  sessionStorage.removeItem('oauth_state');
+                  return;
                 }
+                sessionStorage.removeItem('oauth_state');
+
+                loginWithOAuth(data.user);
+                setPage(Page.IMAGINE);
+              } catch (err) {
+                setError('Google authentication failed');
               }
-              setIsLoading(null);
-            },
-          });
-          google.accounts.id.prompt();
-        } else {
-          throw new Error('Google authentication not configured. Please set VITE_GOOGLE_CLIENT_ID.');
-        }
+            }
+            setIsLoading(null);
+          },
+        });
+        google.accounts.id.prompt();
       } else {
-        // Popup-based Google OAuth
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-          `client_id=${clientId}&` +
-          `redirect_uri=${encodeURIComponent(window.location.origin)}&` +
-          `response_type=code&` +
-          `scope=${encodeURIComponent('openid email profile')}&` +
-          `access_type=offline`;
-
-        const popup = window.open(authUrl, 'google-oauth', 'width=600,height=800');
-
-        if (!popup) {
-          throw new Error('Popup blocked. Please allow popups for this site.');
-        }
-
-        // Handle callback via postMessage or URL polling
-        // For now, we'll use a simpler approach with the token endpoint
-        setIsLoading(null);
-        setError('Google OAuth requires VITE_GOOGLE_CLIENT_ID to be configured.');
+        throw new Error('Google Identity Services not loaded. Please refresh and try again.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Google login failed');

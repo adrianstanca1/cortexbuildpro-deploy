@@ -122,7 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       name: oauthUser.name,
       email: oauthUser.email,
       phone: '',
-      role: UserRole.COMPANY_ADMIN, // Default role for OAuth users
+      role: UserRole.OPERATIVE, // Default role for OAuth users - minimal privileges
       avatarInitials: oauthUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
       avatarUrl: oauthUser.avatarUrl,
       companyId: 'c1',

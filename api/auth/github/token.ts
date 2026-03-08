@@ -1,17 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { handleCorsPreflight, setCorsHeaders } from '../../cors';
 
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || 'Iv23liOpQ1FlTeVrW2di';
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+if (!GITHUB_CLIENT_ID) {
+  console.error('GITHUB_CLIENT_ID environment variable is required');
+}
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Handle CORS preflight requests
+  if (handleCorsPreflight(req, res)) {
+    return;
   }
+
+  // Set CORS headers for allowed origins
+  setCorsHeaders(req, res);
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
