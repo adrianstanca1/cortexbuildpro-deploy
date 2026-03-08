@@ -1,20 +1,56 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleCorsPreflight, setCorsHeaders } from '../../cors';
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
+
+// CORS configuration - inline to avoid module resolution issues
+const ALLOWED_ORIGINS = [
+  'https://buildprodeploy.vercel.app',
+  'https://cortexbuildpro.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+] as const;
+
+function getAllowedOrigin(req: VercelRequest): string | null {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  return ALLOWED_ORIGINS.includes(origin as typeof ALLOWED_ORIGINS[number]) ? origin : null;
+}
+
+function setCorsHeaders(req: VercelRequest, res: VercelResponse): boolean {
+  const allowedOrigin = getAllowedOrigin(req);
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    return true;
+  }
+  return false;
+}
+
+function handleCorsPreflight(req: VercelRequest, res: VercelResponse): boolean {
+  if (req.method === 'OPTIONS') {
+    const allowedOrigin = getAllowedOrigin(req);
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+    res.status(200).end();
+    return true;
+  }
+  return false;
+}
 
 if (!GITHUB_CLIENT_ID) {
   console.error('GITHUB_CLIENT_ID environment variable is required');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Handle CORS preflight requests
-  if (handleCorsPreflight(req, res)) {
-    return;
-  }
-
-  // Set CORS headers for allowed origins
+  if (handleCorsPreflight(req, res)) return;
   setCorsHeaders(req, res);
 
   if (req.method !== 'POST') {
@@ -28,7 +64,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Authorization code required' });
     }
 
-    // Exchange code for token with GitHub
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {

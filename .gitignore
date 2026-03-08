@@ -34,3 +34,4 @@ credentials.json
 # GitHub secrets
 .github/secrets/
 .vercel
+.env*.local

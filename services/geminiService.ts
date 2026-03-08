@@ -2,8 +2,13 @@
 import { GoogleGenAI, LiveServerMessage, Modality, Content, GenerateContentResponse, Type } from "@google/genai";
 import { Message } from "../types";
 
-// Initialize the client with the environment key
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize the client to use the local proxy
+const ai = new GoogleGenAI({ 
+  apiKey: "PROXY_MANAGED", 
+  httpOptions: { 
+    baseUrl: window.location.origin + "/api-proxy" 
+  } 
+});
 
 export interface ChatConfig {
   model: string;
@@ -165,8 +170,9 @@ export const generateVideo = async (prompt: string, aspectRatio: '16:9' | '9:16'
     const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!videoUri) throw new Error("No video URI returned");
 
-    // Fetch the actual video bytes using the API key
-    const videoResponse = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+    // Fetch the actual video bytes through the proxy
+    const proxyVideoUri = videoUri.replace('https://generativelanguage.googleapis.com/', window.location.origin + '/api-proxy/');
+    const videoResponse = await fetch(proxyVideoUri);
     if (!videoResponse.ok) throw new Error("Failed to download video");
     
     const blob = await videoResponse.blob();
