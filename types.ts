@@ -340,6 +340,7 @@ export interface SafetyIncident {
   status: 'Open' | 'Resolved' | 'Investigating';
   date: string;
   type: string;
+  description?: string;
 }
 
 export interface SafetyHazard {
