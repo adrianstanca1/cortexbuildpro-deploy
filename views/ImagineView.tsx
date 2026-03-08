@@ -60,7 +60,7 @@ const ImagineView: React.FC = () => {
   const [notification, setNotification] = useState<string | null>(null);
 
   useEffect(() => {
-    if (projects.length > 0 && !selectedProjectId) {
+    if (projects && projects.length > 0 && !selectedProjectId) {
       setSelectedProjectId(projects[0].id);
     }
     return () => stopCamera();
@@ -144,7 +144,15 @@ const ImagineView: React.FC = () => {
         responseMimeType: 'application/json'
       }, base64Image);
 
-      const data = JSON.parse(result);
+      let data;
+      try {
+          data = JSON.parse(result);
+      } catch (parseError) {
+          console.error("Failed to parse vision JSON:", result);
+          // Fallback to text if JSON parsing fails
+          data = [{ severity: "INFO", title: "Analysis", description: result.substring(0, 100) }];
+      }
+      
       const newObs = (Array.isArray(data) ? data : [data]).map((obs: any) => ({
         ...obs,
         id: Date.now().toString() + Math.random().toString(),
@@ -567,13 +575,29 @@ const ImagineView: React.FC = () => {
                      {isAnalyzing ? <div className="flex flex-col items-center justify-center h-full text-zinc-500"><Loader2 size={24} className="animate-spin mb-2" /><p className="text-xs">Analyzing with Gemini 3 Pro...</p></div> : (
                          analysisResult ? (
                              <div className="space-y-3">
-                                 {(JSON.parse(analysisResult || '[]') as any[]).map((item, i) => (
-                                     <div key={i} className="bg-white border border-zinc-200 p-3 rounded-lg">
-                                         <div className="flex justify-between mb-1"><span className="font-bold text-xs text-zinc-900">{item.title}</span><span className={`text-[10px] px-1.5 rounded ${item.severity === 'High' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{item.severity}</span></div>
-                                         <p className="text-[10px] text-zinc-600 mb-2">{item.description}</p>
-                                         {item.mitigation && <div className="text-[10px] text-green-600 bg-green-50 p-1 rounded">Fix: {item.mitigation}</div>}
-                                     </div>
-                                 ))}
+                                 {(() => {
+                                     try {
+                                         const parsed = JSON.parse(analysisResult);
+                                         const items = Array.isArray(parsed) ? parsed : [parsed];
+                                         return items.map((item: any, i: number) => (
+                                             <div key={i} className="bg-white border border-zinc-200 p-3 rounded-lg">
+                                                 <div className="flex justify-between mb-1">
+                                                     <span className="font-bold text-xs text-zinc-900">{item.title || 'Analysis Detail'}</span>
+                                                     <span className={`text-[10px] px-1.5 rounded ${item.severity === 'High' || item.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                         {item.severity || 'Info'}
+                                                     </span>
+                                                 </div>
+                                                 <p className="text-[10px] text-zinc-600 mb-2">{item.description || item.text || 'No description provided.'}</p>
+                                                 {item.mitigation && <div className="text-[10px] text-green-600 bg-green-50 p-1 rounded">Fix: {item.mitigation}</div>}
+                                             </div>
+                                         ));
+                                     } catch (e) {
+                                         return <div className="text-xs text-zinc-500 p-4 border border-dashed rounded-lg text-center bg-zinc-100/50">
+                                             <p className="font-bold mb-1">Detailed Analysis Report</p>
+                                             <p className="whitespace-pre-wrap text-left">{analysisResult}</p>
+                                         </div>;
+                                     }
+                                 })()}
                              </div>
                          ) : <p className="text-zinc-400 text-xs text-center mt-10">Select a tool to analyze the uploaded image.</p>
                      )}
