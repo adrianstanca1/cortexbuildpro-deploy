@@ -138,10 +138,34 @@ class DatabaseService {
   private dbName: string;
   private dbVersion: number;
   private db: IDBDatabase | null = null;
+  private apiBaseUrl: string;
+  private useBackend: boolean | null = null;
 
   constructor() {
     this.dbName = DB_NAME;
     this.dbVersion = DB_VERSION;
+    // In development, the backend is likely on port 3001 or 3000
+    // In production, it's the same origin
+    this.apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? `${window.location.protocol}//${window.location.hostname}:3001/api`
+      : `${window.location.origin}/api`;
+  }
+
+  private async checkBackend(): Promise<boolean> {
+    if (this.useBackend !== null) return this.useBackend;
+    
+    try {
+      // Simple check to see if we can reach the projects endpoint
+      const response = await fetch(`${this.apiBaseUrl}/projects?companyId=c1`, { method: 'GET' });
+      this.useBackend = response.ok;
+      if (this.useBackend) {
+        console.log("Connected to PostgreSQL backend via Express API");
+      }
+    } catch (e) {
+      console.warn("Backend API not reachable, falling back to IndexedDB");
+      this.useBackend = false;
+    }
+    return this.useBackend;
   }
 
   private async open(): Promise<IDBDatabase> {
@@ -272,16 +296,53 @@ class DatabaseService {
   }
 
   // Specific Accessors
-  async getProjects(): Promise<Project[]> { return this.getAll<Project>(STORES.PROJECTS); }
-  async addProject(p: Project) { return this.add(STORES.PROJECTS, p); }
-  async updateProject(id: string, p: Partial<Project>) {
-      const projects = await this.getProjects();
-      const existing = projects.find(x => x.id === id);
-      if(existing) await this.update(STORES.PROJECTS, { ...existing, ...p });
+  async getProjects(): Promise<Project[]> { 
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects?companyId=c1`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch projects from backend", e);
+      }
+    }
+    return this.getAll<Project>(STORES.PROJECTS); 
   }
+
+  async addProject(p: Project) { 
+    return this.add(STORES.PROJECTS, p); 
+  }
+
+  async updateProject(id: string, p: Partial<Project>) {
+    if (await this.checkBackend()) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(p)
+        });
+        if (response.ok) return;
+      } catch (e) {
+        console.error("Failed to update project on backend", e);
+      }
+    }
+    const projects = await this.getProjects();
+    const existing = projects.find(x => x.id === id);
+    if(existing) await this.update(STORES.PROJECTS, { ...existing, ...p });
+  }
+
   async deleteProject(id: string) { return this.delete(STORES.PROJECTS, id); }
 
-  async getTasks(): Promise<Task[]> { return this.getAll<Task>(STORES.TASKS); }
+  async getTasks(projectId?: string): Promise<Task[]> { 
+    if (await this.checkBackend() && projectId) {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/tasks`);
+        if (response.ok) return await response.json();
+      } catch (e) {
+        console.error("Failed to fetch tasks from backend", e);
+      }
+    }
+    return this.getAll<Task>(STORES.TASKS); 
+  }
   async addTask(t: Task) { return this.add(STORES.TASKS, t); }
   async updateTask(id: string, t: Partial<Task>) {
       const tasks = await this.getTasks();
