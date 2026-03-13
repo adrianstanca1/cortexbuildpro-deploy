@@ -98,6 +98,7 @@ export enum Page {
   VISION = 'VISION',
   ARCHITECTURE = 'ARCHITECTURE',
   MESH = 'MESH',
+  INTELLIGENCE_HUB = 'INTELLIGENCE_HUB',
 }
 
 export interface FeatureEntitlements {

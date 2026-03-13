@@ -42,6 +42,7 @@ import CompanySettingsView from './views/CompanySettingsView';
 import VisionView from './views/VisionView';
 import ArchitectureView from './views/ArchitectureView';
 import MeshView from './views/MeshView';
+import IntelligenceHubView from './views/IntelligenceHubView';
 import { Page, UserRole } from './types';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -168,6 +169,7 @@ const AuthenticatedApp: React.FC = () => {
               {page === Page.VISION && <VisionView />}
               {page === Page.ARCHITECTURE && <ArchitectureView />}
               {page === Page.MESH && <MeshView />}
+              {page === Page.INTELLIGENCE_HUB && <IntelligenceHubView />}
               {page === Page.MARKETPLACE && (
                   <MarketplaceView 
                       installedApps={installedApps} 

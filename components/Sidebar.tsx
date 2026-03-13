@@ -1,11 +1,11 @@
 import React from 'react';
 import { 
-  Monitor, LayoutDashboard, FolderOpen, CheckSquare, Users, Clock, FileText, 
-  Shield, Wrench, PoundSterling, MessageSquare, Map, Cpu, LineChart, 
+  Monitor, LayoutDashboard, FolderOpen, CheckSquare, Users, Clock, FileText,
+  Shield, Wrench, PoundSterling, MessageSquare, Map, Cpu, LineChart,
   HardHat, Zap, Lock, Code, Store, Wand2, Navigation, LogOut,
   BrainCircuit, ShieldCheck, Globe, Activity, Rocket, Building2,
   Settings, Network, Crown, Terminal, ShieldHalf, Layout, Radio, Server,
-  BarChart3, DatabaseZap, Fingerprint, ScanLine, Layers
+  BarChart3, DatabaseZap, Fingerprint, ScanLine, Layers, Eye
 } from 'lucide-react';
 import { Page, UserRole, FeatureEntitlements, Permission } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -66,6 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage }) => {
       items: [
         { id: Page.VISION, label: 'Vision Shard', icon: ScanLine, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN], feature: 'liveVision' },
         { id: Page.ARCHITECTURE, label: 'Logic Arch', icon: Layers, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN], feature: 'aiAssistant' },
+        { id: Page.INTELLIGENCE_HUB, label: 'Intel Lens', icon: Eye, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN, UserRole.SUPERVISOR], feature: 'liveVision' },
         { id: Page.LIVE, label: 'Vision Agent', icon: Zap, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN, UserRole.SUPERVISOR, UserRole.OPERATIVE], feature: 'liveVision' },
         { id: Page.CHAT, label: 'Architect AI', icon: BrainCircuit, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN, UserRole.SUPERVISOR], feature: 'aiAssistant' },
         { id: Page.IMAGINE, label: 'Forge Studio', icon: Wand2, roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.COMPANY_OWNER, UserRole.COMPANY_ADMIN], feature: 'imagineStudio' },

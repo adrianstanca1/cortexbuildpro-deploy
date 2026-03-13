@@ -7,6 +7,7 @@ const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
 const ALLOWED_ORIGINS = [
   'https://buildprodeploy.vercel.app',
   'https://cortexbuildpro.com',
+  'https://www.cortexbuildpro.com',
   'http://localhost:5173',
   'http://localhost:3000',
 ] as const;
