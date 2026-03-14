@@ -11,6 +11,7 @@ on:
         options:
           - staging
           - production
+          - vps
 
 jobs:
   deploy:
@@ -44,12 +45,43 @@ jobs:
             cp ".env.${DEPLOY_ENV}" .env
           fi
 
-      - name: Deploy
+      - name: Deploy to VPS
+        if: github.event.inputs.environment == 'vps'
         env:
-          DEPLOY_ENV: ${{ github.event.inputs.environment }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          echo "Deploying to ${DEPLOY_ENV}..."
-          # Add deployment script here (e.g., rsync, scp, or cloud CLI)
+          echo "Deploying to VPS..."
+          # Set up SSH
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/id_ed25519_vps
+          chmod 600 ~/.ssh/id_ed25519_vps
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+          
+          # Create deployment directory on VPS
+          ssh $VPS_USER@$VPS_HOST "mkdir -p ~/cortexbuildpro-deploy"
+          
+          # Copy files to VPS
+          rsync -avz -e "ssh -i ~/.ssh/id_ed25519_vps -o StrictHostKeyChecking=no" \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='.env' \
+            ./ $VPS_USER@$VPS_HOST:~/cortexbuildpro-deploy/
+          
+          # Execute redeploy script on VPS
+          ssh $VPS_USER@$VPS_HOST "cd ~/cortexbuildpro-deploy && chmod +x redeploy_script.sh && ./redeploy_script.sh"
+
+      - name: Deploy to Vercel (staging/production)
+        if: github.event.inputs.environment != 'vps'
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          echo "Deploying to Vercel ${DEPLOY_ENV}..."
+          npm i -g vercel@latest
+          vercel --token $VERCEL_TOKEN --org $VERCEL_ORG_ID --project $VERCEL_PROJECT_ID --env $DEPLOY_ENV --prod
 
       - name: Notify deployment status
         if: always()

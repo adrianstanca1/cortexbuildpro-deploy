@@ -62,10 +62,10 @@ jobs:
         run: npm ci
 
       - name: Run ESLint
-        run: npx eslint . --ext .ts,.tsx || true # Non-blocking for now
+        run: npx eslint . --ext .ts,.tsx
 
       - name: Check for security vulnerabilities
-        run: npm audit --audit-level=moderate || true
+        run: npm audit --audit-level=moderate
 
   # Deploy to staging
   deploy-staging:
@@ -98,11 +98,14 @@ jobs:
         id: deploy
         env:
           STAGING_URL: https://staging.cortexbuildpro.com
-          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           echo "Deploying to staging environment..."
-          echo "url=${STAGING_URL}" >> $GITHUB_OUTPUT
+          npm i -g vercel@latest
+          vercel --token $VERCEL_TOKEN --org $VERCEL_ORG_ID --project $VERCEL_PROJECT_ID --env preview --prod
+          echo "url=https://staging.cortexbuildpro.com" >> $GITHUB_OUTPUT
 
   # Deploy to production
   deploy-production:
@@ -135,11 +138,14 @@ jobs:
         id: deploy
         env:
           PROD_URL: https://cortexbuildpro.com
-          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           echo "Deploying to production environment..."
-          echo "url=${PROD_URL}" >> $GITHUB_OUTPUT
+          npm i -g vercel@latest
+          vercel --token $VERCEL_TOKEN --org $VERCEL_ORG_ID --project $VERCEL_PROJECT_ID --env production --prod
+          echo "url=https://cortexbuildpro.com" >> $GITHUB_OUTPUT
 
   # Docker build (optional)
   docker:
