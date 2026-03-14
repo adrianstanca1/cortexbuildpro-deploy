@@ -7,6 +7,8 @@ WORKDIR /app
 COPY . ./
 RUN echo "API_KEY=PLACEHOLDER" > ./.env
 RUN echo "GEMINI_API_KEY=PLACEHOLDER" >> ./.env
+RUN echo "OLLAMA_HOST=PLACEHOLDER" >> ./.env
+RUN echo "OLLAMA_MODEL=PLACEHOLDER" >> ./.env
 
 # Install server dependencies
 WORKDIR /app/server
@@ -27,6 +29,13 @@ WORKDIR /app
 COPY --from=builder /app/server .
 # Copy built frontend assets from the builder stage
 COPY --from=builder /app/dist ./dist
+
+# Document expected environment variables
+# OLLAMA_HOST: Host URL for Ollama service (default: http://host.docker.internal:11434 for Docker Desktop)
+# OLLAMA_MODEL: Model to use (default: nemotron-3-super:latest)
+# API_KEY/GEMINI_API_KEY: For Gemini AI services
+# PORT: Server port (default: 3000)
+# NODE_ENV: Node environment (development/production)
 
 EXPOSE 3000
 
