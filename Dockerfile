@@ -32,7 +32,7 @@ COPY --from=builder /app/dist ./dist
 
 # Document expected environment variables
 # OLLAMA_HOST: Host URL for Ollama service (default: http://host.docker.internal:11434 for Docker Desktop)
-# OLLAMA_MODEL: Model to use (default: nemotron-3-super:latest)
+# OLLAMA_MODEL: Model to use (default: qwen3.5:latest)
 # API_KEY/GEMINI_API_KEY: For Gemini AI services
 # PORT: Server port (default: 3000)
 # NODE_ENV: Node environment (development/production)
